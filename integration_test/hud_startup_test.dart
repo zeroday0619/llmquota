@@ -11,7 +11,7 @@ void main() {
     await application.main(['--demo', '--hud']);
     await tester.pumpAndSettle();
     expect(find.byType(HudOverlay), findsOneWidget);
-    expect(find.text('QUETA / DEMO'), findsOneWidget);
+    expect(find.text('QUOTA / DEMO'), findsOneWidget);
     expect(
         find.byTooltip('Return to window (Esc)').hitTestable(), findsOneWidget);
     expect(find.byTooltip('Close').hitTestable(), findsOneWidget);

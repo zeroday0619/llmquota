@@ -34,7 +34,7 @@ void main() {
     final controller = QuotaController()..setDemo(true);
     final window = HudTestWindow();
     final saved = <bool>[];
-    await tester.pumpWidget(QuetaApp(
+    await tester.pumpWidget(QuotaApp(
         controller: controller,
         window: window,
         preferences: const OverlayPreferences(),

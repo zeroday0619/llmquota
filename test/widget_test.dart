@@ -49,7 +49,7 @@ void main() {
       await tester.binding.setSurfaceSize(null);
     });
     await tester.pumpWidget(
-      QuetaApp(
+      QuotaApp(
         controller: controller,
         window: TestWindow(),
         preferences: OverlayPreferences(compact: compact),
@@ -76,7 +76,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final controller = QuotaController()..setDemo(true);
     await tester.pumpWidget(
-      QuetaApp(
+      QuotaApp(
         controller: controller,
         window: TestWindow(),
         preferences: const OverlayPreferences(),

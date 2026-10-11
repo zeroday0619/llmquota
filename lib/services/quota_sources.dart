@@ -201,7 +201,7 @@ class QuotaSources {
         'capabilities': {'experimentalApi': true},
         'clientInfo': {
           'name': 'llmqueta',
-          'title': 'LLM Queta',
+          'title': 'LLM Quota',
           'version': '0.1.0',
         },
       });

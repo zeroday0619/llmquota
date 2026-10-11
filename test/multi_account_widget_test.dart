@@ -46,7 +46,7 @@ void main() {
       controller.dispose();
       await tester.binding.setSurfaceSize(null);
     });
-    await tester.pumpWidget(QuetaApp(
+    await tester.pumpWidget(QuotaApp(
         controller: controller,
         window: AccountTestWindow(),
         preferences: OverlayPreferences(hud: hud)));

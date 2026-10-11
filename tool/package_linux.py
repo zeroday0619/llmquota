@@ -85,7 +85,7 @@ def build_package(arguments, work):
         control.parent.mkdir()
         control.write_text(
             f"Package: llmqueta\nVersion: {version}\nArchitecture: {ARCHITECTURES[architecture][1]}\n"
-            "Maintainer: LLM Queta contributors\nSection: utils\nPriority: optional\n"
+            "Maintainer: LLM Quota contributors\nSection: utils\nPriority: optional\n"
             "Depends: libgtk-3-0, libstdc++6, libc6\n"
             "Description: Desktop overlay for AI subscription quotas and reset times\n"
         )

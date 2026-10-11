@@ -19,8 +19,8 @@ abstract class OverlayWindow {
   Future<void> close();
 }
 
-class QuetaApp extends StatelessWidget {
-  const QuetaApp({
+class QuotaApp extends StatelessWidget {
+  const QuotaApp({
     super.key,
     required this.controller,
     required this.window,
@@ -36,7 +36,7 @@ class QuetaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'LLM Queta',
+        title: 'LLM Quota',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           brightness: Brightness.dark,
@@ -190,7 +190,7 @@ class _OverlayPageState extends State<OverlayPage> {
                                         ),
                                         SizedBox(width: 8),
                                         Text(
-                                          'QUETA',
+                                          'QUOTA',
                                           style: TextStyle(
                                             fontSize: 14,
                                             fontWeight: FontWeight.w700,
@@ -674,9 +674,9 @@ class _ConnectionHelp extends StatelessWidget {
         title: const Text('Connect providers'),
         content: const SingleChildScrollView(
           child: SelectableText(
-            'Codex\nInstall Codex CLI and sign in with your ChatGPT account. Queta reads limits through its app server.\n\n'
+            'Codex\nInstall Codex CLI and sign in with your ChatGPT account. Quota reads limits through its app server.\n\n'
             'Claude\nConnect the included statusline bridge in Claude Code settings. Usage appears after a response. See README for the command.\n\n'
-            'Antigravity\nStart the Antigravity desktop app. Queta detects its local language server. See README for manual endpoint overrides.\n\n'
+            'Antigravity\nStart the Antigravity desktop app. Quota detects its local language server. See README for manual endpoint overrides.\n\n'
             'Demo data is available in the settings menu. It is never mixed with account data.',
           ),
         ),

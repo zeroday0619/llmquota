@@ -54,8 +54,8 @@ class HudOverlay extends StatelessWidget {
                             const SizedBox(width: 8),
                             Text(
                                 controller.demo
-                                    ? 'QUETA / DEMO'
-                                    : 'QUETA / HUD',
+                                    ? 'QUOTA / DEMO'
+                                    : 'QUOTA / HUD',
                                 style: const TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,

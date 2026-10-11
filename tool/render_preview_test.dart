@@ -116,7 +116,7 @@ void main() {
       final boundaryKey = GlobalKey();
       await tester.pumpWidget(RepaintBoundary(
           key: boundaryKey,
-          child: QuetaApp(
+          child: QuotaApp(
             controller: controller,
             window: PreviewWindow(),
             preferences: OverlayPreferences(hud: hud),

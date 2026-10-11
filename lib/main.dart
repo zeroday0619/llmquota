@@ -51,7 +51,7 @@ Future<void> main(List<String> arguments) async {
       minimumSize:
           preferences.hud ? const Size(280, 140) : const Size(340, 260),
       center: true,
-      title: 'LLM Queta',
+      title: 'LLM Quota',
       titleBarStyle: Platform.isMacOS && !preferences.hud
           ? TitleBarStyle.normal
           : TitleBarStyle.hidden,
@@ -69,7 +69,7 @@ Future<void> main(List<String> arguments) async {
   controller.addListener(window.updateContentSize);
   controller.start();
   runApp(
-    QuetaApp(
+    QuotaApp(
       controller: controller,
       window: window,
       preferences: preferences,

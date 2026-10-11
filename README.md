@@ -1,6 +1,6 @@
-![LLM Queta: Your AI quotas, at a glance. Codex, Claude, and Antigravity.](docs/assets/banner.png)
+![LLM Quota: Your AI quotas, at a glance. Codex, Claude, and Antigravity.](docs/assets/banner.png)
 
-# LLM Queta
+# LLM Quota
 
 A Flutter desktop overlay for Codex, Claude, and Antigravity subscription quotas. It displays multiple account profiles together with remaining percentages, reset countdowns, subscription plans, reported token usage, available credit balances, observation age, and connection status. Sample values appear only in the explicitly selected demo mode.
 
@@ -31,7 +31,7 @@ Run `dart run tool/check_providers.dart` to check local integration status witho
 | Claude | Claude Code `statusLine` JSON and retained local transcripts | Configure the included bridge for quotas and active-session identification. Token totals use local history. |
 | Antigravity | Local Language Server quota RPC | A running Antigravity instance. This internal protocol can change independently of this app. |
 
-Queta never treats missing quota as zero usage. A reset countdown reaching zero does not restore the displayed allowance: the display waits for a new provider observation. Observations older than ten minutes are marked stale. Provider failures retain previous measurements with a stale indicator when available.
+Quota never treats missing quota as zero usage. A reset countdown reaching zero does not restore the displayed allowance: the display waits for a new provider observation. Observations older than ten minutes are marked stale. Provider failures retain previous measurements with a stale indicator when available.
 
 ### Multiple accounts
 
@@ -43,7 +43,7 @@ The initial **Default** profile for each provider keeps the existing environment
 | --- | --- | --- |
 | Codex | Absolute Codex home directory | Sign in to Codex with `CODEX_HOME` set to that directory. Use a different directory for each account. |
 | Claude | Absolute Claude configuration directory and a separate snapshot file | Sign in with `CLAUDE_CONFIG_DIR` set to that directory. Configure that account's statusline bridge with `--snapshot` pointing to its snapshot file. |
-| Antigravity | Explicit loopback URL and optional CSRF environment variable name | Run the corresponding signed-in instance. Set the named variable to that instance's CSRF token in the environment that launches Queta. |
+| Antigravity | Explicit loopback URL and optional CSRF environment variable name | Run the corresponding signed-in instance. Set the named variable to that instance's CSRF token in the environment that launches Quota. |
 
 For example, on macOS or Linux, prepare a separate Codex or Claude login with:
 
@@ -52,7 +52,7 @@ CODEX_HOME="$HOME/.codex-work" codex login
 CLAUDE_CONFIG_DIR="$HOME/.claude-work" claude auth login
 ```
 
-On PowerShell, set `$env:CODEX_HOME` or `$env:CLAUDE_CONFIG_DIR` before running the corresponding login command. Enter the resulting absolute directory path in Queta; fields do not expand `~` or shell variables. Codex uses its configured home for [credential storage](https://learn.chatgpt.com/docs/auth). Claude documents [separate account logins using `CLAUDE_CONFIG_DIR`](https://code.claude.com/docs/en/authentication#log-in-with-multiple-accounts).
+On PowerShell, set `$env:CODEX_HOME` or `$env:CLAUDE_CONFIG_DIR` before running the corresponding login command. Enter the resulting absolute directory path in Quota; fields do not expand `~` or shell variables. Codex uses its configured home for [credential storage](https://learn.chatgpt.com/docs/auth). Claude documents [separate account logins using `CLAUDE_CONFIG_DIR`](https://code.claude.com/docs/en/authentication#log-in-with-multiple-accounts).
 
 For the additional Claude account, merge this property into that account's settings, replacing both paths:
 
@@ -65,9 +65,9 @@ For the additional Claude account, merge this property into that account's setti
 }
 ```
 
-Use the same snapshot path in Queta. Each account needs its own configuration directory and snapshot file to keep retained token history and quota observations separate. Recompile the bridge after updating it to use the `--snapshot` option.
+Use the same snapshot path in Quota. Each account needs its own configuration directory and snapshot file to keep retained token history and quota observations separate. Recompile the bridge after updating it to use the `--snapshot` option.
 
-Custom Codex profiles do not inherit the default account's selected thread ID, so their session token total remains unavailable. Custom Codex and Claude profiles exclude inherited API-token overrides that could select a different account. Antigravity profiles store an environment variable name rather than the token value; update the endpoint and environment when that instance restarts. Profiles refer to existing provider logins and do not perform login or account switching inside Queta.
+Custom Codex profiles do not inherit the default account's selected thread ID, so their session token total remains unavailable. Custom Codex and Claude profiles exclude inherited API-token overrides that could select a different account. Antigravity profiles store an environment variable name rather than the token value; update the endpoint and environment when that instance restarts. Profiles refer to existing provider logins and do not perform login or account switching inside Quota.
 
 Profile metadata is saved in `accounts.json` alongside `preferences.json`: `~/Library/Application Support/llmqueta` on macOS, `%APPDATA%/llmqueta` on Windows, and `$XDG_CONFIG_HOME/llmqueta` or `~/.config/llmqueta` on Linux. The file contains labels and connection locations, not copied provider credentials. An unreadable or invalid account file is preserved and blocks profile writes; repair the file and restart the app. A refresh failure retains only that account's previous data. Changing a connection or deleting a profile discards its old observation.
 
@@ -95,7 +95,7 @@ On Windows PowerShell, create the output directory with `New-Item -ItemType Dire
 }
 ```
 
-Merge this property into existing settings rather than replacing the file. If another statusline command is already configured, integrate both commands with a wrapper that supplies the same stdin JSON to each. Queta does not modify Claude settings automatically.
+Merge this property into existing settings rather than replacing the file. If another statusline command is already configured, integrate both commands with a wrapper that supplies the same stdin JSON to each. Quota does not modify Claude settings automatically.
 
 The bridge stores the supported quota windows, observation timestamp, session identifier, and absolute transcript path when provided. It does not copy conversation content or credentials. The app reads usage counters from retained JSONL files under `~/.claude/projects`, or `$CLAUDE_CONFIG_DIR/projects`, and does not transmit those files. The stored transcript path identifies the active session only when it matches a file within that history directory. It prints a short Claude quota status so it can also serve as the terminal statusline. Recompile the bridge after updating it to supply session metadata.
 
@@ -107,11 +107,11 @@ The bridge stores the supported quota windows, observation timestamp, session id
 
 ### Antigravity endpoint override
 
-Queta first looks for the running Antigravity Language Server and its process-owned listening ports. On macOS and Linux it uses `ps` and `lsof`; an advertised extension-server port is a fallback when listener discovery is unavailable. On Windows it uses PowerShell process and TCP connection queries. Discovery reads the matching process's CSRF flag in memory and does not save it.
+Quota first looks for the running Antigravity Language Server and its process-owned listening ports. On macOS and Linux it uses `ps` and `lsof`; an advertised extension-server port is a fallback when listener discovery is unavailable. On Windows it uses PowerShell process and TCP connection queries. Discovery reads the matching process's CSRF flag in memory and does not save it.
 
 For an explicitly configured local server, set `LLMQUETA_ANTIGRAVITY_URL` to its HTTP(S) origin, such as `https://127.0.0.1:42100`, and `LLMQUETA_ANTIGRAVITY_CSRF_TOKEN` to the token of that same running Language Server process. Ports and tokens can change when Antigravity restarts. Do not commit token values or paste them into issue reports.
 
-Only literal loopback addresses with an explicit port are accepted. Redirects are disabled. Self-signed certificates are accepted only for that configured loopback endpoint. Queta requests `RetrieveUserQuotaSummary` and uses `GetUserStatus` for account plan metadata or as a fallback on older servers. If a response has no reset timestamp, the app displays that the time is unavailable.
+Only literal loopback addresses with an explicit port are accepted. Redirects are disabled. Self-signed certificates are accepted only for that configured loopback endpoint. Quota requests `RetrieveUserQuotaSummary` and uses `GetUserStatus` for account plan metadata or as a fallback on older servers. If a response has no reset timestamp, the app displays that the time is unavailable.
 
 ## Interface
 

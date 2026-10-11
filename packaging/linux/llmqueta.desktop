@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=LLM Queta
+Name=LLM Quota
 Comment=AI subscription quota overlay
 Exec=llmqueta
 Icon=llmqueta
