@@ -51,6 +51,9 @@ void main() {
     expect(usage.lifetime?.input, 120);
     expect(usage.lifetime?.output, 14);
     expect(usage.lifetime?.cachedInput, 40);
+    expect(usage.today?.cachedCreationInput, 60);
+    expect(usage.session?.cachedCreationInput, 60);
+    expect(usage.lifetime?.cachedCreationInput, 60);
     expect(usage.lifetimeLabel, 'Local total');
   });
 
@@ -63,9 +66,13 @@ void main() {
     expect(usage.today?.total, 67);
     expect(usage.session?.total, 67);
     expect(usage.lifetime?.total, 134);
+    expect(usage.today?.cachedCreationInput, 30);
+    expect(usage.session?.cachedCreationInput, 30);
+    expect(usage.lifetime?.cachedCreationInput, 60);
     final tomorrow = await readClaudeTokenUsage(
         environment: environment, now: DateTime(2026, 10, 9));
     expect(tomorrow.today?.total, 0);
+    expect(tomorrow.today?.cachedCreationInput, 0);
     expect(tomorrow.session, isNull);
   });
 
@@ -97,6 +104,7 @@ void main() {
         await readClaudeTokenUsage(environment: environment, now: now);
     expect(usage.lifetime?.total, 72);
     expect(usage.lifetime?.cachedInput, 20);
+    expect(usage.lifetime?.cachedCreationInput, 30);
   });
 
   test('negative usage makes totals unavailable', () async {
@@ -104,6 +112,19 @@ void main() {
     final usage =
         await readClaudeTokenUsage(environment: environment, now: now);
     expect(usage.lifetime, isNull);
+  });
+
+  test('missing cache creation counters remain unavailable', () async {
+    final missingCreation = record('two', now);
+    final message = missingCreation['message'] as Map;
+    (message['usage'] as Map).remove('cache_creation_input_tokens');
+    await write('active', [record('one', now), missingCreation]);
+    final usage = await readClaudeTokenUsage(
+        environment: environment, sessionId: 'active', now: now);
+    expect(usage.today?.cachedCreationInput, isNull);
+    expect(usage.session?.cachedCreationInput, isNull);
+    expect(usage.lifetime?.cachedCreationInput, isNull);
+    expect(usage.lifetime?.total, 104);
   });
 
   test('latest timestamp wins when corrected counters decrease', () async {

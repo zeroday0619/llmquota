@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app.dart';
+import 'debug_console.dart';
+import 'services/debug_console.dart';
 import 'models/quota_account.dart';
 import 'usage_summary.dart';
 import 'services/account_store.dart';
@@ -14,6 +16,10 @@ import 'services/quota_controller.dart';
 Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
+  if (arguments.contains('--debug-console')) {
+    await runDebugConsole();
+    return;
+  }
   final savedPreferences = await OverlayPreferences.load();
   final preferences = arguments.contains('--hud')
       ? savedPreferences.copyWith(hud: true)
@@ -29,6 +35,7 @@ Future<void> main(List<String> arguments) async {
         'Account settings could not be loaded. Check accounts.json before saving.';
   }
   final controller = QuotaController(
+    debugMode: arguments.contains('--debug'),
     accounts: accounts,
     saveAccounts: (accounts) async {
       if (accountConfigurationError != null) {
@@ -71,6 +78,7 @@ Future<void> main(List<String> arguments) async {
   runApp(
     QuotaApp(
       controller: controller,
+      debugConsole: ProcessDebugConsoleWindow(),
       window: window,
       preferences: preferences,
       accountConfigurationError: accountConfigurationError,

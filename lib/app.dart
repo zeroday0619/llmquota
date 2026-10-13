@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 
 import 'models/quota.dart';
 import 'account_dialog.dart';
+import 'debug_dialog.dart';
+import 'services/debug_console.dart';
 import 'services/preferences.dart';
 import 'services/quota_controller.dart';
 import 'hud_overlay.dart';
@@ -27,7 +29,9 @@ class QuotaApp extends StatelessWidget {
     required this.preferences,
     this.savePreferences,
     this.accountConfigurationError,
+    this.debugConsole,
   });
+  final DebugConsoleWindow? debugConsole;
   final String? accountConfigurationError;
   final QuotaController controller;
   final OverlayWindow window;
@@ -56,6 +60,7 @@ class QuotaApp extends StatelessWidget {
           preferences: preferences,
           savePreferences: savePreferences,
           accountConfigurationError: accountConfigurationError,
+          debugConsole: debugConsole,
         ),
       );
 }
@@ -68,7 +73,9 @@ class OverlayPage extends StatefulWidget {
     required this.preferences,
     this.savePreferences,
     this.accountConfigurationError,
+    this.debugConsole,
   });
+  final DebugConsoleWindow? debugConsole;
   final String? accountConfigurationError;
   final QuotaController controller;
   final OverlayWindow window;
@@ -83,10 +90,60 @@ class _OverlayPageState extends State<OverlayPage> {
   late OverlayPreferences preferences = widget.preferences;
   late final Timer ticker;
   bool applyingPreferences = false;
+  bool _observedDebugMode = false;
+  DialogRoute<void>? _debugRoute;
+
+  void _synchronizeDebugConsole() {
+    final enabled = widget.controller.debugMode;
+    if (enabled == _observedDebugMode) return;
+    _observedDebugMode = enabled;
+    if (enabled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.controller.debugMode) {
+          unawaited(_showDebugConsole());
+        }
+      });
+      WidgetsBinding.instance.ensureVisualUpdate();
+    } else {
+      unawaited(widget.debugConsole?.close() ?? Future<void>.value());
+      final route = _debugRoute;
+      if (route != null && route.isActive) {
+        route.navigator?.removeRoute(route);
+      }
+      _debugRoute = null;
+    }
+  }
+
+  Future<void> _showDebugConsole() async {
+    if (!mounted || !widget.controller.debugMode) return;
+    try {
+      final console = widget.debugConsole;
+      if (console != null) {
+        await console.show(widget.controller);
+      } else if (_debugRoute == null) {
+        final route = DialogRoute<void>(
+          context: context,
+          builder: (_) => DebugDialog(controller: widget.controller),
+        );
+        _debugRoute = route;
+        await Navigator.of(context).push(route);
+        if (_debugRoute == route) _debugRoute = null;
+      }
+    } on Object {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:
+              Text('Could not open the debug console. Retry from settings.'),
+        ));
+      }
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    widget.controller.addListener(_synchronizeDebugConsole);
+    _synchronizeDebugConsole();
     ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
@@ -95,6 +152,8 @@ class _OverlayPageState extends State<OverlayPage> {
   @override
   void dispose() {
     ticker.cancel();
+    widget.controller.removeListener(_synchronizeDebugConsole);
+    unawaited(widget.debugConsole?.close() ?? Future<void>.value());
     super.dispose();
   }
 
@@ -238,6 +297,11 @@ class _OverlayPageState extends State<OverlayPage> {
                                           ),
                                         ),
                                       );
+                                    case 'debug':
+                                      widget.controller.setDebugMode(
+                                          !widget.controller.debugMode);
+                                    case 'diagnostics':
+                                      unawaited(_showDebugConsole());
                                     case 'demo':
                                       widget.controller.setDemo(
                                         !widget.controller.demo,
@@ -286,6 +350,16 @@ class _OverlayPageState extends State<OverlayPage> {
                                     checked: widget.controller.demo,
                                     child: const Text('Demo data'),
                                   ),
+                                  CheckedPopupMenuItem(
+                                    value: 'debug',
+                                    checked: widget.controller.debugMode,
+                                    child: const Text('Debug mode'),
+                                  ),
+                                  if (widget.controller.debugMode)
+                                    const PopupMenuItem(
+                                      value: 'diagnostics',
+                                      child: Text('Debug diagnostics'),
+                                    ),
                                   const PopupMenuItem(
                                       value: 'accounts',
                                       child: Text('Manage accounts')),
@@ -310,9 +384,13 @@ class _OverlayPageState extends State<OverlayPage> {
                           child: Row(
                             children: [
                               Text(
-                                widget.controller.demo
-                                    ? 'DEMO · SAMPLE DATA'
-                                    : 'CONNECTED ACCOUNTS',
+                                widget.controller.debugMode
+                                    ? (widget.controller.demo
+                                        ? 'DEBUG · DEMO DATA'
+                                        : 'DEBUG MODE')
+                                    : widget.controller.demo
+                                        ? 'DEMO · SAMPLE DATA'
+                                        : 'CONNECTED ACCOUNTS',
                                 style: TextStyle(
                                   fontSize: 9,
                                   letterSpacing: 1.3,

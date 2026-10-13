@@ -41,6 +41,109 @@ void main() {
       label: 'Personal',
       configurationDirectory: '${Directory.systemTemp.path}/personal');
 
+  test('debug diagnostics are opt-in, immutable, and cleared on disable',
+      () async {
+    final controller = QuotaController(
+      accounts: [work],
+      accountFetcher: (account) async => measurement(account.provider),
+    );
+    addTearDown(controller.dispose);
+    await controller.refresh();
+    expect(controller.diagnostics, isEmpty);
+    var notifications = 0;
+    controller.addListener(() => notifications++);
+    controller.setDebugMode(true);
+    expect(notifications, 1);
+    final before = DateTime.now().toUtc();
+    await controller.refresh();
+    final diagnostic = controller.diagnostics['work']!;
+    expect(diagnostic.attemptedAt.isBefore(before), isFalse);
+    expect(diagnostic.elapsed, greaterThanOrEqualTo(Duration.zero));
+    expect(diagnostic.status, QuotaStatus.live);
+    expect(diagnostic.errorType, isNull);
+    expect(diagnostic.retainedPrevious, isFalse);
+    expect(() => controller.diagnostics.clear(), throwsUnsupportedError);
+    controller.setDebugMode(false);
+    expect(controller.diagnostics, isEmpty);
+  });
+
+  test('debug errors retain raw status and only the exception type', () async {
+    var failure = false;
+    final controller = QuotaController(
+      accounts: [work],
+      debugMode: true,
+      accountFetcher: (account) async {
+        if (failure) throw StateError('credential=private-secret');
+        return measurement(account.provider);
+      },
+    );
+    addTearDown(controller.dispose);
+    await controller.refresh();
+    failure = true;
+    await controller.refresh();
+    final diagnostic = controller.diagnostics['work']!;
+    expect(diagnostic.status, QuotaStatus.error);
+    expect(diagnostic.errorType, 'StateError');
+    expect(diagnostic.retainedPrevious, isTrue);
+    expect(controller.snapshots['work']!.status, QuotaStatus.stale);
+  });
+
+  test('returned error status has no caught exception type', () async {
+    final controller = QuotaController(
+      accounts: [work],
+      debugMode: true,
+      accountFetcher: (account) async =>
+          measurement(account.provider, status: QuotaStatus.error),
+    );
+    addTearDown(controller.dispose);
+    await controller.refresh();
+    expect(controller.diagnostics['work']!.status, QuotaStatus.error);
+    expect(controller.diagnostics['work']!.errorType, isNull);
+    expect(controller.diagnostics['work']!.retainedPrevious, isFalse);
+  });
+
+  test('pending refresh cannot capture after changing debug mode', () async {
+    for (final initiallyEnabled in [false, true]) {
+      final response = Completer<QuotaSnapshot>();
+      final controller = QuotaController(
+        accounts: [work],
+        debugMode: initiallyEnabled,
+        accountFetcher: (_) => response.future,
+      );
+      addTearDown(controller.dispose);
+      final request = controller.refresh();
+      if (initiallyEnabled) controller.setDebugMode(false);
+      controller.setDebugMode(true);
+      response.complete(measurement(work.provider));
+      await request;
+      expect(controller.diagnostics, isEmpty);
+    }
+  });
+
+  test('account and demo generations discard old debug diagnostics', () async {
+    final old = Completer<QuotaSnapshot>();
+    final replacement = Completer<QuotaSnapshot>();
+    final controller = QuotaController(
+      accounts: [work],
+      debugMode: true,
+      accountFetcher: (account) =>
+          account.id == work.id ? old.future : replacement.future,
+    );
+    addTearDown(controller.dispose);
+    final request = controller.refresh();
+    await controller.setAccounts([personal]);
+    old.complete(measurement(work.provider));
+    await request;
+    expect(controller.diagnostics, isEmpty);
+    replacement.complete(measurement(personal.provider));
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.diagnostics.keys, ['personal']);
+    controller.setDemo(true);
+    expect(controller.diagnostics.containsKey('work'), isFalse);
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.diagnostics['personal']!.status, QuotaStatus.demo);
+  });
+
   test('same-provider accounts refresh concurrently and isolate failures',
       () async {
     var failure = false;

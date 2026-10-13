@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../models/quota.dart';
+import '../models/integration_diagnostic.dart';
 import '../models/quota_account.dart';
 import '../models/usage.dart';
 import 'app_paths.dart';
@@ -24,7 +25,7 @@ class QuotaSources {
 
   Future<QuotaSnapshot> fetchAccount(QuotaAccount account) async {
     try {
-      account.validate();
+      await integrationStep('account.validate', () async => account.validate());
       final custom = account.configurationDirectory != null ||
           account.snapshotPath != null ||
           account.endpoint != null ||
@@ -37,7 +38,9 @@ class QuotaSources {
           final directory = account.configurationDirectory;
           if (directory == null ||
               !Directory(directory).isAbsolute ||
-              !await Directory(directory).exists()) {
+              !await integrationStep('account.configurationDirectory',
+                  () => Directory(directory).exists(),
+                  available: (exists) => exists)) {
             throw const FormatException();
           }
           if (account.provider == ProviderKind.codex) {
@@ -53,7 +56,12 @@ class QuotaSources {
             scopedEnvironment["CODEX_HOME"] = directory;
           } else {
             final snapshot = account.snapshotPath;
-            if (snapshot == null || !File(snapshot).isAbsolute) {
+            final snapshotValid = await integrationStep(
+              'account.snapshotConfiguration',
+              () async => snapshot != null && File(snapshot).isAbsolute,
+              available: (valid) => valid,
+            );
+            if (!snapshotValid) {
               throw const FormatException();
             }
             scopedEnvironment.removeWhere((key, _) => const {
@@ -72,7 +80,8 @@ class QuotaSources {
         case ProviderKind.antigravity:
           final endpoint = account.endpoint;
           if (endpoint == null) throw const FormatException();
-          validateAntigravityEndpoint(endpoint);
+          await integrationStep('account.endpointConfiguration',
+              () async => validateAntigravityEndpoint(endpoint));
           scopedEnvironment.removeWhere((key, _) => const {
                 'LLMQUETA_ANTIGRAVITY_URL',
                 'LLMQUETA_ANTIGRAVITY_CSRF_TOKEN',
@@ -92,8 +101,13 @@ class QuotaSources {
                 }
               }
             }
-            if (token == null || token.isEmpty) throw const FormatException();
-            scopedEnvironment["LLMQUETA_ANTIGRAVITY_CSRF_TOKEN"] = token;
+            final tokenAvailable = await integrationStep(
+              'account.tokenAvailability',
+              () async => token != null && token.isNotEmpty,
+              available: (available) => available,
+            );
+            if (!tokenAvailable) throw const FormatException();
+            scopedEnvironment["LLMQUETA_ANTIGRAVITY_CSRF_TOKEN"] = token!;
           }
       }
       final sources = QuotaSources(
@@ -137,7 +151,9 @@ class QuotaSources {
     StreamSubscription<List<int>>? errors;
     final pending = <int, Completer<Map<String, dynamic>>>{};
     try {
-      final executable = await resolveCodexExecutable(environment: environment);
+      final executable = await integrationStep('codex.executable.resolve',
+          () => resolveCodexExecutable(environment: environment),
+          available: (executable) => executable != null);
       if (executable == null) {
         return _failure(
           ProviderKind.codex,
@@ -145,12 +161,14 @@ class QuotaSources {
           status: QuotaStatus.unavailable,
         );
       }
-      process = await Process.start(
-        executable,
-        ['app-server'],
-        environment: environment,
-        includeParentEnvironment: false,
-      );
+      process = await integrationStep<Process>(
+          'codex.appServer.start',
+          () => Process.start(
+                executable,
+                ['app-server'],
+                environment: environment,
+                includeParentEnvironment: false,
+              ));
       final running = process;
       errors = running.stderr.listen((_) {});
       output = running.stdout
@@ -192,9 +210,21 @@ class QuotaSources {
             if (parameters != null) 'params': parameters,
           }),
         );
-        return waiter.future.timeout(timeout).whenComplete(() {
-          pending.remove(id);
-        });
+        return integrationStep(
+          'codex.rpc.$method',
+          () => waiter.future.timeout(timeout).whenComplete(() {
+            pending.remove(id);
+          }),
+          available: (response) =>
+              !response.containsKey('error') && response['result'] != null,
+          metrics: (response) {
+            final error = response['error'];
+            return {
+              if (error is Map && error['code'] is num)
+                'rpcErrorCode': error['code'] as num
+            };
+          },
+        );
       }
 
       final initialization = await request(0, 'initialize', {
@@ -215,7 +245,11 @@ class QuotaSources {
         final response = await request(1, 'account/rateLimits/read');
         final result = response['result'];
         snapshot = result is Map<String, dynamic>
-            ? parseCodexQuota(result, source: 'Codex app-server')
+            ? await integrationStep('codex.quota.parse',
+                () async => parseCodexQuota(result, source: 'Codex app-server'),
+                available: (snapshot) => snapshot.windows.isNotEmpty,
+                metrics: (snapshot) =>
+                    {'quotaWindows': snapshot.windows.length})
             : _failure(
                 ProviderKind.codex,
                 'Sign in with ChatGPT in Codex, then refresh.',
@@ -250,10 +284,14 @@ class QuotaSources {
           optionalUsage(3, {'threadId': threadId}),
       ]);
       return snapshot.withUsage(
-        tokenUsage: parseCodexTokenUsage(
-          usage.first ?? const {},
-          sessionPayload: usage.length > 1 ? usage[1] : null,
-        ),
+        tokenUsage: await integrationStep<TokenUsage>(
+            'codex.tokens.parse',
+            () async => parseCodexTokenUsage(
+                  usage.first ?? const {},
+                  sessionPayload: usage.length > 1 ? usage[1] : null,
+                ),
+            available: (usage) => usage.hasData,
+            metrics: _tokenMetrics),
       );
     } on ProcessException {
       return _failure(
@@ -297,15 +335,19 @@ class QuotaSources {
     ]) async {
       try {
         return snapshot.withUsage(
-          tokenUsage: await readClaudeTokenUsage(
-            environment: environment,
-            sessionId: metadata?['session_id'] is String
-                ? metadata!['session_id'] as String
-                : null,
-            transcriptPath: metadata?['transcript_path'] is String
-                ? metadata!['transcript_path'] as String
-                : null,
-          ).timeout(timeout),
+          tokenUsage: await integrationStep<TokenUsage>(
+              'claude.tokens.history',
+              () => readClaudeTokenUsage(
+                    environment: environment,
+                    sessionId: metadata?['session_id'] is String
+                        ? metadata!['session_id'] as String
+                        : null,
+                    transcriptPath: metadata?['transcript_path'] is String
+                        ? metadata!['transcript_path'] as String
+                        : null,
+                  ).timeout(timeout),
+              available: (usage) => usage.hasData,
+              metrics: _tokenMetrics),
         );
       } catch (_) {
         // Missing or unreadable transcripts cannot discard measured quotas.
@@ -317,26 +359,40 @@ class QuotaSources {
       final file = claudeSnapshotPath == null
           ? paths.claudeSnapshotFile
           : File(claudeSnapshotPath!);
-      if (!await file.exists()) {
+      if (!await integrationStep('claude.snapshot.exists', () => file.exists(),
+          available: (exists) => exists)) {
         return await withTokens(_failure(
           ProviderKind.claude,
           'Connect the Claude Code status-line bridge to display usage.',
           status: QuotaStatus.unavailable,
         ));
       }
-      if (await file.length() > 65536) throw const FormatException();
-      final decoded = jsonDecode(await file.readAsString());
-      if (decoded is! Map<String, dynamic>) throw const FormatException();
-      final observed = DateTime.tryParse(
-        decoded['observed_at'] is String
+      if (await integrationStep('claude.snapshot.size', () => file.length(),
+              available: (bytes) => bytes <= 65536,
+              metrics: (bytes) => {'bytes': bytes}) >
+          65536) throw const FormatException();
+      final content = await integrationStep(
+          'claude.snapshot.read', () => file.readAsString());
+      final decoded = await integrationStep('claude.snapshot.decode', () async {
+        final decoded = jsonDecode(content);
+        if (decoded is! Map<String, dynamic>) throw const FormatException();
+        return decoded;
+      });
+      final observed =
+          await integrationStep('claude.snapshot.timestamp', () async {
+        final observed = DateTime.tryParse(decoded['observed_at'] is String
             ? decoded['observed_at'] as String
-            : '',
-      );
-      if (observed == null ||
-          observed.isAfter(DateTime.now().add(const Duration(minutes: 1)))) {
-        throw const FormatException();
-      }
-      final observation = parseClaudeQuota(decoded, observedAt: observed);
+            : '');
+        if (observed == null ||
+            observed.isAfter(DateTime.now().add(const Duration(minutes: 1)))) {
+          throw const FormatException();
+        }
+        return observed;
+      });
+      final observation = await integrationStep('claude.quota.parse',
+          () async => parseClaudeQuota(decoded, observedAt: observed),
+          available: (snapshot) => snapshot.windows.isNotEmpty,
+          metrics: (snapshot) => {'quotaWindows': snapshot.windows.length});
       if (observation.windows.isEmpty)
         return await withTokens(observation, decoded);
       final snapshot = parseClaudeQuota(
@@ -373,24 +429,32 @@ class QuotaSources {
 
   Future<String?> _fetchClaudePlan() async {
     try {
-      final executable =
-          await resolveClaudeExecutable(environment: environment);
+      final executable = await integrationStep('claude.executable.resolve',
+          () => resolveClaudeExecutable(environment: environment),
+          available: (executable) => executable != null);
       if (executable == null) return null;
-      final decoded = jsonDecode(
-        await _runDiscovery(executable, ['auth', 'status', '--json']),
-      );
+      final decoded = await integrationStep(
+          'claude.auth.status',
+          () async => jsonDecode(
+              await _runDiscovery(executable, ['auth', 'status', '--json'])),
+          available: (decoded) =>
+              decoded is Map &&
+              decoded['loggedIn'] == true &&
+              decoded['authMethod'] == 'claude.ai');
       if (decoded is! Map<String, dynamic> ||
           decoded['loggedIn'] != true ||
           decoded['authMethod'] != 'claude.ai') return null;
       final subscription = decoded['subscriptionType'];
-      if (subscription is! String) return null;
-      return switch (subscription.toLowerCase()) {
-        'pro' => 'Pro',
-        'max' => 'Max',
-        'team' => 'Team',
-        'enterprise' => 'Enterprise',
-        _ => subscription,
-      };
+      return await integrationStep<String?>('claude.plan.normalize', () async {
+        if (subscription is! String) return null;
+        return switch (subscription.toLowerCase()) {
+          'pro' => 'Pro',
+          'max' => 'Max',
+          'team' => 'Team',
+          'enterprise' => 'Enterprise',
+          _ => subscription,
+        };
+      }, available: (plan) => plan != null && plan.isNotEmpty);
     } catch (_) {
       // Optional account metadata must not prevent a valid quota observation.
       return null;
@@ -403,11 +467,15 @@ class QuotaSources {
       final endpoints = configured != null && configured.isNotEmpty
           ? [
               AntigravityEndpoint(
-                validateAntigravityEndpoint(configured),
+                await integrationStep('antigravity.endpoint.validate',
+                    () async => validateAntigravityEndpoint(configured)),
                 environment['LLMQUETA_ANTIGRAVITY_CSRF_TOKEN'],
               ),
             ]
-          : await _discoverAntigravity();
+          : await integrationStep(
+              'antigravity.discovery', () => _discoverAntigravity(),
+              available: (endpoints) => endpoints.isNotEmpty,
+              metrics: (endpoints) => {'candidates': endpoints.length});
       if (endpoints.isEmpty) {
         return _failure(
           ProviderKind.antigravity,
@@ -420,12 +488,16 @@ class QuotaSources {
         if (DateTime.now().isAfter(deadline)) break;
         try {
           final remaining = deadline.difference(DateTime.now());
-          final snapshot = await _fetchAntigravityEndpoint(
-            endpoint,
-            remaining < const Duration(seconds: 3)
-                ? remaining
-                : const Duration(seconds: 3),
-          );
+          final snapshot = await integrationStep(
+              'antigravity.candidate.probe',
+              () => _fetchAntigravityEndpoint(
+                    endpoint,
+                    remaining < const Duration(seconds: 3)
+                        ? remaining
+                        : const Duration(seconds: 3),
+                  ),
+              available: (snapshot) => snapshot.windows.isNotEmpty,
+              metrics: (snapshot) => {'quotaWindows': snapshot.windows.length});
           if (snapshot.windows.isNotEmpty) return snapshot;
         } catch (_) {
           // A stale local process must not prevent probing another candidate.
@@ -447,12 +519,14 @@ class QuotaSources {
     final candidates = <AntigravityProcess>[];
     final portsByProcess = <int, List<int>>{};
     if (Platform.isWindows) {
-      final output = await _runDiscovery('powershell.exe', [
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        r"[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding; $items = @(Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'language[_-]server' -and $_.CommandLine -match 'antigravity' } | ForEach-Object { $processId = $_.ProcessId; @{ processId = $processId; commandLine = $_.CommandLine; ports = @(Get-NetTCPConnection -State Listen -OwningProcess $processId -ErrorAction SilentlyContinue | Select-Object -ExpandProperty LocalPort) } }); ConvertTo-Json -InputObject $items -Compress -Depth 4",
-      ]);
+      final output = await integrationStep(
+          'antigravity.processAndPorts.discover',
+          () => _runDiscovery('powershell.exe', [
+                '-NoProfile',
+                '-NonInteractive',
+                '-Command',
+                r"[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding; $items = @(Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'language[_-]server' -and $_.CommandLine -match 'antigravity' } | ForEach-Object { $processId = $_.ProcessId; @{ processId = $processId; commandLine = $_.CommandLine; ports = @(Get-NetTCPConnection -State Listen -OwningProcess $processId -ErrorAction SilentlyContinue | Select-Object -ExpandProperty LocalPort) } }); ConvertTo-Json -InputObject $items -Compress -Depth 4",
+              ]));
       final decoded = jsonDecode(output);
       if (decoded is! List) return [];
       for (final value in decoded.take(12)) {
@@ -472,7 +546,8 @@ class QuotaSources {
         ];
       }
     } else {
-      final output = await _runDiscovery('ps', ['-xww', '-o', 'pid=,command=']);
+      final output = await integrationStep('antigravity.process.discover',
+          () => _runDiscovery('ps', ['-xww', '-o', 'pid=,command=']));
       for (final line in const LineSplitter().convert(output)) {
         final match = RegExp(r'^\s*(\d+)\s+(.+)$').firstMatch(line);
         if (match == null) continue;
@@ -485,15 +560,17 @@ class QuotaSources {
       }
       for (final candidate in candidates) {
         try {
-          final output = await _runDiscovery('lsof', [
-            '-nP',
-            '-a',
-            '-p',
-            '${candidate.processId}',
-            '-iTCP',
-            '-sTCP:LISTEN',
-            '-Fn',
-          ]);
+          final output = await integrationStep(
+              'antigravity.ports.discover',
+              () => _runDiscovery('lsof', [
+                    '-nP',
+                    '-a',
+                    '-p',
+                    '${candidate.processId}',
+                    '-iTCP',
+                    '-sTCP:LISTEN',
+                    '-Fn',
+                  ]));
           portsByProcess[candidate.processId] = [
             for (final line in const LineSplitter().convert(output))
               if (line.startsWith('n') && RegExp(r':(\d+)$').hasMatch(line))
@@ -525,52 +602,60 @@ class QuotaSources {
     String executable,
     List<String> arguments,
   ) async {
-    final process = await Process.start(
-      executable,
-      arguments,
-      environment: environment,
-      includeParentEnvironment: false,
-    );
-    final errors = process.stderr.listen((_) {});
-    final bytes = <int>[];
-    final outputFinished = Completer<void>();
-    final output = process.stdout.listen(
-      (chunk) {
-        if (outputFinished.isCompleted) return;
-        if (bytes.length + chunk.length > 2097152) {
-          outputFinished.completeError(const FormatException());
-          return;
-        }
-        bytes.addAll(chunk);
-      },
-      onError: (Object error, StackTrace stack) {
-        if (!outputFinished.isCompleted)
-          outputFinished.completeError(error, stack);
-      },
-      onDone: () {
-        if (!outputFinished.isCompleted) outputFinished.complete();
-      },
-    );
-    try {
-      await (() async {
-        await outputFinished.future;
-        if (await process.exitCode != 0)
-          throw StateError('Discovery unavailable.');
-      })()
-          .timeout(const Duration(seconds: 3));
-      return utf8.decode(bytes);
-    } finally {
-      process.kill();
-      await output.cancel();
-      if (!outputFinished.isCompleted) outputFinished.complete();
-      await errors.cancel();
+    var exitCode = 0;
+    var byteCount = 0;
+    return integrationStep('discovery.cli', () async {
+      final process = await Process.start(
+        executable,
+        arguments,
+        environment: environment,
+        includeParentEnvironment: false,
+      );
+      final errors = process.stderr.listen((_) {});
+      final bytes = <int>[];
+      final outputFinished = Completer<void>();
+      final output = process.stdout.listen(
+        (chunk) {
+          if (outputFinished.isCompleted) return;
+          if (bytes.length + chunk.length > 2097152) {
+            outputFinished.completeError(const FormatException());
+            return;
+          }
+          bytes.addAll(chunk);
+          byteCount = bytes.length;
+        },
+        onError: (Object error, StackTrace stack) {
+          if (!outputFinished.isCompleted)
+            outputFinished.completeError(error, stack);
+        },
+        onDone: () {
+          if (!outputFinished.isCompleted) outputFinished.complete();
+        },
+      );
       try {
-        await process.exitCode.timeout(const Duration(seconds: 1));
-      } on TimeoutException {
-        process.kill(ProcessSignal.sigkill);
-        await process.exitCode.timeout(const Duration(seconds: 1));
+        await (() async {
+          await outputFinished.future;
+          exitCode = await integrationStep(
+              'discovery.cli.exit', () => process.exitCode,
+              available: (code) => code == 0,
+              metrics: (code) => {'exitCode': code, 'bytes': byteCount});
+          if (exitCode != 0) throw StateError('Discovery unavailable.');
+        })()
+            .timeout(const Duration(seconds: 3));
+        return utf8.decode(bytes);
+      } finally {
+        process.kill();
+        await output.cancel();
+        if (!outputFinished.isCompleted) outputFinished.complete();
+        await errors.cancel();
+        try {
+          await process.exitCode.timeout(const Duration(seconds: 1));
+        } on TimeoutException {
+          process.kill(ProcessSignal.sigkill);
+          await process.exitCode.timeout(const Duration(seconds: 1));
+        }
       }
-    }
+    }, metrics: (_) => {'exitCode': exitCode, 'bytes': byteCount});
   }
 
   Future<QuotaSnapshot> _fetchAntigravityEndpoint(
@@ -588,32 +673,47 @@ class QuotaSources {
         String method,
         Map<String, dynamic> body,
       ) async {
-        if (expired)
-          throw TimeoutException('The local quota deadline expired.');
-        final request = await client.postUrl(
-          endpoint.replace(
-            path: '/exa.language_server_pb.LanguageServerService/$method',
-          ),
-        );
-        request.followRedirects = false;
-        request.headers.contentType = ContentType.json;
-        request.headers.set('Connect-Protocol-Version', '1');
-        final token = connection.csrfToken;
-        if (token != null && token.isNotEmpty)
-          request.headers.set('X-Codeium-Csrf-Token', token);
-        request.write(jsonEncode(body));
-        final response = await request.close();
-        if (response.statusCode != HttpStatus.ok)
-          throw const HttpException('Local quota request failed.');
-        final bytes = <int>[];
-        await for (final chunk in response) {
-          if (bytes.length + chunk.length > 1048576)
-            throw const FormatException();
-          bytes.addAll(chunk);
-        }
-        final decoded = jsonDecode(utf8.decode(bytes));
-        if (decoded is! Map<String, dynamic>) throw const FormatException();
-        return decoded;
+        var statusCode = 0;
+        var responseBytes = 0;
+        return integrationStep('antigravity.http.$method', () async {
+          if (expired)
+            throw TimeoutException('The local quota deadline expired.');
+          final request = await client.postUrl(
+            endpoint.replace(
+              path: '/exa.language_server_pb.LanguageServerService/$method',
+            ),
+          );
+          request.followRedirects = false;
+          request.headers.contentType = ContentType.json;
+          request.headers.set('Connect-Protocol-Version', '1');
+          final token = connection.csrfToken;
+          if (token != null && token.isNotEmpty)
+            request.headers.set('X-Codeium-Csrf-Token', token);
+          request.write(jsonEncode(body));
+          final response = await integrationStep(
+              'antigravity.http.$method.response', () => request.close(),
+              available: (response) => response.statusCode == HttpStatus.ok,
+              metrics: (response) => {'statusCode': response.statusCode});
+          statusCode = response.statusCode;
+          if (response.statusCode != HttpStatus.ok)
+            throw const HttpException('Local quota request failed.');
+          final bytes =
+              await integrationStep('antigravity.http.$method.body', () async {
+            final bytes = <int>[];
+            await for (final chunk in response) {
+              if (bytes.length + chunk.length > 1048576)
+                throw const FormatException();
+              bytes.addAll(chunk);
+              responseBytes = bytes.length;
+            }
+            return bytes;
+          }, metrics: (bytes) => {'bytes': bytes.length});
+          return integrationStep('antigravity.http.$method.decode', () async {
+            final decoded = jsonDecode(utf8.decode(bytes));
+            if (decoded is! Map<String, dynamic>) throw const FormatException();
+            return decoded;
+          });
+        }, metrics: (_) => {'statusCode': statusCode, 'bytes': responseBytes});
       }
 
       return await (() async {
@@ -621,7 +721,10 @@ class QuotaSources {
           final response = await request('RetrieveUserQuotaSummary', {
             'forceRefresh': true,
           });
-          final snapshot = parseAntigravityQuota(response);
+          final snapshot = await integrationStep('antigravity.quota.parse',
+              () async => parseAntigravityQuota(response),
+              available: (snapshot) => snapshot.windows.isNotEmpty,
+              metrics: (snapshot) => {'quotaWindows': snapshot.windows.length});
           if (snapshot.windows.isNotEmpty) {
             measuredSnapshot = snapshot;
             if (snapshot.planName != null) return snapshot;
@@ -634,11 +737,16 @@ class QuotaSources {
                   'locale': 'en',
                 },
               });
-              final enriched = parseAntigravityQuota({
-                ...response,
-                if (status['userStatus'] is Map)
-                  'userStatus': status['userStatus'],
-              }, observedAt: snapshot.observedAt);
+              final enriched = await integrationStep(
+                  'antigravity.plan.parse',
+                  () async => parseAntigravityQuota({
+                        ...response,
+                        if (status['userStatus'] is Map)
+                          'userStatus': status['userStatus'],
+                      }, observedAt: snapshot.observedAt),
+                  available: (snapshot) => snapshot.planName != null,
+                  metrics: (snapshot) =>
+                      {'quotaWindows': snapshot.windows.length});
               return QuotaSnapshot(
                 provider: snapshot.provider,
                 windows: snapshot.windows,
@@ -660,16 +768,18 @@ class QuotaSources {
           // Older local servers expose model quotas through GetUserStatus.
           if (expired) rethrow;
         }
-        return parseAntigravityQuota(
-          await request('GetUserStatus', {
-            'metadata': {
-              'ideName': 'antigravity',
-              'extensionName': 'antigravity',
-              'ideVersion': 'unknown',
-              'locale': 'en',
-            },
-          }),
-        );
+        final fallback = await request('GetUserStatus', {
+          'metadata': {
+            'ideName': 'antigravity',
+            'extensionName': 'antigravity',
+            'ideVersion': 'unknown',
+            'locale': 'en',
+          },
+        });
+        return await integrationStep('antigravity.quota.parse',
+            () async => parseAntigravityQuota(fallback),
+            available: (snapshot) => snapshot.windows.isNotEmpty,
+            metrics: (snapshot) => {'quotaWindows': snapshot.windows.length});
       })()
           .timeout(
         requestTimeout,
@@ -864,3 +974,9 @@ AntigravityProcess? parseAntigravityProcess(int processId, String commandLine) {
     argument('extension_server_csrf_token'),
   );
 }
+
+Map<String, num> _tokenMetrics(TokenUsage usage) => {
+      if (usage.today != null) 'todayTokens': usage.today!.total,
+      if (usage.session != null) 'sessionTokens': usage.session!.total,
+      if (usage.lifetime != null) 'lifetimeTokens': usage.lifetime!.total,
+    };

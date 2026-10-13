@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../models/integration_diagnostic.dart';
 import '../models/quota.dart';
 import '../models/quota_account.dart';
 import '../models/usage.dart';
@@ -12,13 +13,32 @@ typedef QuotaFetcher = Future<QuotaSnapshot> Function(ProviderKind provider);
 typedef AccountQuotaFetcher = Future<QuotaSnapshot> Function(
     QuotaAccount account);
 
+@immutable
+class RefreshDiagnostic {
+  const RefreshDiagnostic({
+    required this.attemptedAt,
+    required this.elapsed,
+    required this.status,
+    required this.retainedPrevious,
+    this.errorType,
+  });
+
+  final DateTime attemptedAt;
+  final Duration elapsed;
+  final QuotaStatus status;
+  final String? errorType;
+  final bool retainedPrevious;
+}
+
 class QuotaController extends ChangeNotifier {
   QuotaController({
     QuotaFetcher? fetcher,
     List<QuotaAccount>? accounts,
     AccountQuotaFetcher? accountFetcher,
     Future<void> Function(List<QuotaAccount>)? saveAccounts,
-  })  : _accounts = List.unmodifiable(accounts ?? QuotaAccount.defaults),
+    bool debugMode = false,
+  })  : _debugMode = debugMode,
+        _accounts = List.unmodifiable(accounts ?? QuotaAccount.defaults),
         _fetcher = accountFetcher ??
             (fetcher == null
                 ? QuotaSources().fetchAccount
@@ -33,6 +53,30 @@ class QuotaController extends ChangeNotifier {
   List<QuotaAccount> get accounts => _accounts;
   final Map<String, QuotaSnapshot> snapshots = {};
   bool _saving = false;
+  bool _debugMode;
+  bool get debugMode => _debugMode;
+  int _debugGeneration = 0;
+  final Map<String, RefreshDiagnostic> _diagnostics = {};
+  Map<String, RefreshDiagnostic> get diagnostics =>
+      Map.unmodifiable(_diagnostics);
+
+  final Map<String, List<IntegrationDiagnostic>> _integrationDiagnostics = {};
+  Map<String, List<IntegrationDiagnostic>> get integrationDiagnostics =>
+      Map.unmodifiable({
+        for (final entry in _integrationDiagnostics.entries)
+          entry.key: List<IntegrationDiagnostic>.unmodifiable(entry.value),
+      });
+
+  void setDebugMode(bool enabled) {
+    if (_disposed || _debugMode == enabled) return;
+    _debugMode = enabled;
+    _debugGeneration++;
+    if (!enabled) {
+      _diagnostics.clear();
+      _integrationDiagnostics.clear();
+    }
+    notifyListeners();
+  }
 
   Future<void> setAccounts(List<QuotaAccount> accounts) async {
     if (_disposed) return;
@@ -47,6 +91,8 @@ class QuotaController extends ChangeNotifier {
         for (final account in _accounts) account.id: account
       };
       _generation++;
+      _diagnostics.clear();
+      _integrationDiagnostics.clear();
       refreshing = false;
       snapshots.removeWhere((id, snapshot) => !next.any((account) =>
           account.id == id &&
@@ -92,21 +138,58 @@ class QuotaController extends ChangeNotifier {
     _generation++;
     refreshing = false;
     snapshots.clear();
+    _diagnostics.clear();
+    _integrationDiagnostics.clear();
     unawaited(refresh());
   }
 
   Future<void> refresh() async {
     if (refreshing || _disposed) return;
     final generation = _generation;
+    final captureDiagnostics = _debugMode;
+    final debugGeneration = _debugGeneration;
     refreshing = true;
     notifyListeners();
     await Future.wait(
       accounts.map((account) async {
         final provider = account.provider;
+        final attemptedAt = captureDiagnostics ? DateTime.now().toUtc() : null;
+        final stopwatch = captureDiagnostics ? (Stopwatch()..start()) : null;
+        String? errorType;
         QuotaSnapshot snapshot;
         try {
-          snapshot = demo ? _demo(provider) : await _fetcher(account);
-        } on Object {
+          if (demo) {
+            snapshot = _demo(provider);
+          } else if (captureDiagnostics) {
+            snapshot = await runZoned(
+              () => _fetcher(account),
+              zoneValues: {
+                integrationDiagnosticSinkKey:
+                    (IntegrationDiagnostic diagnostic) {
+                  if (_disposed ||
+                      generation != _generation ||
+                      !_debugMode ||
+                      debugGeneration != _debugGeneration) return;
+                  final events = _integrationDiagnostics.putIfAbsent(
+                      account.id, () => <IntegrationDiagnostic>[]);
+                  events.add(diagnostic);
+                  if (events.length > 200) {
+                    events.removeRange(0, events.length - 200);
+                  }
+                  notifyListeners();
+                },
+              },
+            );
+          } else {
+            snapshot = await _fetcher(account);
+          }
+        } on Object catch (error) {
+          if (captureDiagnostics) {
+            final type = error.runtimeType.toString();
+            errorType = RegExp(r'^[A-Za-z_][A-Za-z0-9_]{0,63}$').hasMatch(type)
+                ? type
+                : 'Exception';
+          }
           snapshot = QuotaSnapshot(
             provider: provider,
             windows: [],
@@ -116,11 +199,14 @@ class QuotaController extends ChangeNotifier {
             message: 'Could not refresh. Check the connection and retry.',
           );
         }
+        stopwatch?.stop();
         if (_disposed || generation != _generation) return;
+        final resultStatus = snapshot.status;
         final previous = snapshots[account.id];
-        if (snapshot.status == QuotaStatus.error &&
+        final retainedPrevious = snapshot.status == QuotaStatus.error &&
             previous != null &&
-            previous.hasUsage) {
+            previous.hasUsage;
+        if (retainedPrevious) {
           snapshot = QuotaSnapshot(
             provider: provider,
             windows: previous.windows,
@@ -132,6 +218,17 @@ class QuotaController extends ChangeNotifier {
             resetCredits: previous.resetCredits,
             status: QuotaStatus.stale,
             message: snapshot.message,
+          );
+        }
+        if (captureDiagnostics &&
+            _debugMode &&
+            debugGeneration == _debugGeneration) {
+          _diagnostics[account.id] = RefreshDiagnostic(
+            attemptedAt: attemptedAt!,
+            elapsed: stopwatch!.elapsed,
+            status: resultStatus,
+            errorType: errorType,
+            retainedPrevious: retainedPrevious,
           );
         }
         snapshots[account.id] = snapshot.withAccount(account);

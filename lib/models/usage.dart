@@ -4,12 +4,14 @@ class TokenCount {
     this.input,
     this.output,
     this.cachedInput,
+    this.cachedCreationInput,
   });
 
   final int total;
   final int? input;
   final int? output;
   final int? cachedInput;
+  final int? cachedCreationInput;
 }
 
 class TokenUsage {

@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../models/integration_diagnostic.dart';
 import '../models/usage.dart';
 
 /// Reads retained local API usage rather than live context occupancy.
@@ -10,6 +12,26 @@ Future<TokenUsage> readClaudeTokenUsage({
   String? transcriptPath,
   DateTime? now,
 }) async {
+  final candidateSink = Zone.current[integrationDiagnosticSinkKey];
+  final sink =
+      candidateSink is IntegrationDiagnosticSink ? candidateSink : null;
+  final attemptedAt = sink == null ? null : DateTime.now().toUtc();
+  final stopwatch = sink == null ? null : (Stopwatch()..start());
+  final records = <String, _UsageRecord>{};
+  var bytes = 0;
+  var files = 0;
+  void emit(String stage, String outcome, [Object? error]) {
+    if (sink == null) return;
+    sink(IntegrationDiagnostic(
+      stage: stage,
+      outcome: outcome,
+      attemptedAt: attemptedAt!,
+      elapsed: stopwatch!.elapsed,
+      errorType: error?.runtimeType.toString(),
+      metrics: {'bytes': bytes, 'files': files, 'records': records.length},
+    ));
+  }
+
   TokenUsage unavailable(String reason) => TokenUsage(
         todayLabel: 'Today (local)',
         lifetimeLabel: 'Local total',
@@ -18,15 +40,15 @@ Future<TokenUsage> readClaudeTokenUsage({
   final home = environment['HOME'] ?? environment['USERPROFILE'];
   final config = environment['CLAUDE_CONFIG_DIR'] ??
       (home == null ? null : '$home/.claude');
-  if (config == null)
-    return unavailable('Claude local history is unavailable.');
-  final directory = Directory('$config/projects');
-  if (!await directory.exists()) {
+  if (config == null) {
+    emit('claude.history.noHistory', 'unavailable');
     return unavailable('Claude local history is unavailable.');
   }
-  final records = <String, _UsageRecord>{};
-  var bytes = 0;
-  var files = 0;
+  final directory = Directory('$config/projects');
+  if (!await directory.exists()) {
+    emit('claude.history.noHistory', 'unavailable');
+    return unavailable('Claude local history is unavailable.');
+  }
   try {
     await for (final entry
         in directory.list(recursive: true, followLinks: false)) {
@@ -47,6 +69,7 @@ Future<TokenUsage> readClaudeTokenUsage({
       if (length > 64 * 1024 * 1024 ||
           bytes > 256 * 1024 * 1024 ||
           files > 10000) {
+        emit('claude.history.scanLimit', 'unavailable');
         return unavailable('Claude history exceeds the local scan limit.');
       }
       await for (final line in entry
@@ -87,10 +110,12 @@ Future<TokenUsage> readClaudeTokenUsage({
         records[identifier] = previous == null ? next : previous.merge(next);
       }
     }
-  } on Object {
+  } on Object catch (error) {
+    emit('claude.history.scan.error', 'error', error);
     return unavailable('Claude history is incomplete or unreadable.');
   }
   if (records.isEmpty) {
+    emit('claude.history.scan.empty', 'unavailable');
     return unavailable('No recorded Claude token usage is available.');
   }
   final localNow = (now ?? DateTime.now()).toLocal();
@@ -100,20 +125,26 @@ Future<TokenUsage> readClaudeTokenUsage({
     var input = 0;
     var output = 0;
     var cached = 0;
+    var created = 0;
+    var creationAvailable = true;
     for (final record in selected) {
       input += record.input + (record.cached ?? 0) + (record.created ?? 0);
       output += record.output;
       cached += record.cached ?? 0;
+      created += record.created ?? 0;
+      if (record.created == null) creationAvailable = false;
     }
     return TokenCount(
       total: input + output,
       input: input,
       output: output,
       cachedInput: cached,
+      cachedCreationInput: creationAvailable ? created : null,
     );
   }
 
   final session = records.values.where((record) => record.session);
+  emit('claude.history.scan.success', 'success');
   return TokenUsage(
     today: sum(records.values.where(
       (record) => !record.date.isBefore(start) && record.date.isBefore(end),

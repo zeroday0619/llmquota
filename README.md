@@ -21,6 +21,24 @@ Run the native window integration test with `flutter test integration_test/deskt
 
 The macOS build disables App Sandbox because it launches the installed Codex CLI, discovers the user's Antigravity process, and reads the shared Claude snapshot and retained local token-usage records. It is intended for direct desktop distribution, not the Mac App Store sandbox. Release signing and notarization require the distributor's Apple credentials and are not configured here.
 
+## Debug mode
+
+Launch the executable with `--debug` or enable **Debug mode** in the settings menu. Enabling debug mode automatically opens a separate **Debug console** desktop window, including when starting with `--debug` or using HUD mode. The overlay remains usable while the console is open. The console inspects every configured account, including accounts hidden from the quota view. Close the console independently and reopen it with **Debug diagnostics** in the settings menu. Disabling debug mode closes the console. Select **Refresh** to collect each account's attempt timestamp, elapsed time, fetch status, exception type when a fetch throws, and whether previous data was retained. Provider-reported failures show their status without an exception type.
+
+The dialog also shows account and snapshot counts, the refresh interval, and every normalized usage metric, including metrics for hidden accounts. Observation metrics include the timestamp, age, stale flag, plan, and data availability. Each quota window includes its identifier, label, exact used and remaining percentages, duration, reset timestamp, signed time until reset, and reset-due flag. Today, session, and lifetime token metrics include their source labels and exact total, input, output, cached input, and cache-creation input counts. Credit metrics include the unrounded balance, unlimited flag, availability flag, and reset credits. Missing values show `Unavailable`; reported zero and false values remain distinct. Cache-creation counts are retained separately for Claude while remaining included in input and total tokens. Raw provider fields that the adapters do not retain are outside this view.
+
+Integration diagnostics record the running and completed stages of each account's provider connection. Codex stages cover executable discovery, app-server startup, initialization, quota and usage RPCs, and parsing. Claude stages cover the statusline snapshot, timestamp validation, optional authentication/plan lookup, and retained token history. Claude history diagnostics distinguish missing, empty, incomplete, and scan-limit cases and report scanned files, bytes, and valid records. Antigravity stages cover endpoint validation or discovery, candidate probes, quota/status HTTP requests, and parsing. Numeric diagnostics include RPC error codes, HTTP status codes, response sizes, process exit codes, candidate counts, and parsed metric counts when available. Optional lookup failures remain visible even when the primary quota succeeds.
+
+Each event includes its UTC timestamp, outcome, elapsed time, and sanitized exception type. The console receives running-stage events before a request finishes. Records are capped at the latest 200 events per account and are cleared when debug mode is disabled, account settings change, or demo mode changes. Demo mode does not access providers and produces no integration events. Stage names and numeric counters are recorded without command arguments, executable paths, endpoint URLs, environment values, RPC bodies, response bodies, authentication tokens, or exception messages.
+
+Debug mode works in release builds and is independent of demo data. It is session-only and does not change saved preferences. Diagnostics stay in memory and exclude raw responses, exception messages, account labels, connection paths, and credentials. Disabling debug mode clears the recorded diagnostics. In HUD mode, the console opens automatically; return to the normal window to access its reopen menu. The console runs as a separate app process and receives an in-memory report from the overlay once per second and when account data changes. It does not load account settings, query providers independently, or write preferences. Closing the overlay ends the console session.
+
+```sh
+open build/macos/Build/Products/Release/llmqueta.app --args --debug
+```
+
+Close any existing instance before launching with arguments. On Windows or Linux, pass `--debug` directly to the executable.
+
 ## Data connections
 
 Run `dart run tool/check_providers.dart` to check local integration status without printing credentials or quota percentages. The command queries the registered accounts and identifies results by their one-based position in the account list without printing account labels or connection paths.
