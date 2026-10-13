@@ -25,7 +25,7 @@ Use Flutter 3.47.6, Xcode and Python 3.10 or newer on macOS:
 flutter pub get
 flutter build macos --release
 python3 tool/package_macos.py \
-  --app build/macos/Build/Products/Release/llmqueta.app \
+  --app build/macos/Build/Products/Release/llmquota.app \
   --output dist
 ```
 
@@ -46,7 +46,7 @@ python3 tool/package_linux.py --format deb \
   --bundle build/linux/x64/release/bundle --architecture x86_64 --output dist
 ```
 
-For aarch64 use `--architecture aarch64` and `build/linux/arm64/release/bundle`. The packager checks the ELF architecture of the executable and bundled libraries before staging them. It preserves the Flutter `lib` and `data` directories under `/usr/lib/llmqueta`; the desktop entry launches `/usr/bin/llmqueta`.
+For aarch64 use `--architecture aarch64` and `build/linux/arm64/release/bundle`. The packager checks the ELF architecture of the executable and bundled libraries before staging them. It preserves the Flutter `lib` and `data` directories under `/usr/lib/llmquota`; the desktop entry launches `/usr/bin/llmquota`.
 
 | Format | Required packaging tools | Installation |
 | --- | --- | --- |
@@ -61,14 +61,14 @@ AppImage tooling is downloaded from fixed upstream versions with checked SHA-256
 
 ```sh
 python3 .github/scripts/fetch_appimage_tools.py \
-  --architecture x86_64 --output /tmp/llmqueta-appimage-tools
+  --architecture x86_64 --output /tmp/llmquota-appimage-tools
 APPIMAGE_EXTRACT_AND_RUN=1 python3 tool/package_linux.py \
   --format appimage --architecture x86_64 \
   --bundle build/linux/x64/release/bundle --output dist \
-  --linuxdeploy /tmp/llmqueta-appimage-tools/linuxdeploy.AppImage \
-  --appimagetool /tmp/llmqueta-appimage-tools/appimagetool.AppImage \
-  --gtk-plugin /tmp/llmqueta-appimage-tools/linuxdeploy-plugin-gtk.sh \
-  --runtime-file /tmp/llmqueta-appimage-tools/runtime
+  --linuxdeploy /tmp/llmquota-appimage-tools/linuxdeploy.AppImage \
+  --appimagetool /tmp/llmquota-appimage-tools/appimagetool.AppImage \
+  --gtk-plugin /tmp/llmquota-appimage-tools/linuxdeploy-plugin-gtk.sh \
+  --runtime-file /tmp/llmquota-appimage-tools/runtime
 ```
 
 The packaging script itself does not download tools. GTK is deployed through the GTK plugin. AppImage still depends on a compatible host kernel and glibc; packaging on Ubuntu 22.04 does not promise compatibility with older distributions.

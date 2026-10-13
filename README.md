@@ -23,7 +23,18 @@ The macOS build disables App Sandbox because it launches the installed Codex CLI
 
 ## Debug mode
 
-Launch the executable with `--debug` or enable **Debug mode** in the settings menu. Enabling debug mode automatically opens a separate **Debug console** desktop window, including when starting with `--debug` or using HUD mode. The overlay remains usable while the console is open. The console inspects every configured account, including accounts hidden from the quota view. Close the console independently and reopen it with **Debug diagnostics** in the settings menu. Disabling debug mode closes the console. Select **Refresh** to collect each account's attempt timestamp, elapsed time, fetch status, exception type when a fetch throws, and whether previous data was retained. Provider-reported failures show their status without an exception type.
+Launch the executable with `--debug` or enable **Debug mode** in the settings menu. Enabling debug mode automatically opens a separate **Debug console** desktop window, including when starting with `--debug` or using HUD mode. The overlay remains usable while the console is open. The console opens on the **Logs** tab and inspects every configured account, including accounts hidden from the quota view. **Metrics** retains the complete numeric diagnostic view.
+
+Log entries use a `dmesg`-style prefix: elapsed seconds since debug activation, provider, and one-based account position. Entries from concurrent accounts share one chronological stream. Codex JSON-RPC logs show outgoing requests, incoming replies, notifications, and correlated numeric request IDs. Antigravity HTTP(S) logs show POST operations, fixed RPC service paths, local port numbers, safe content/protocol metadata, authentication-header presence, status codes, response sizes, and filtered JSON payloads. Claude logs snapshot reads and the optional authentication CLI exchange; transcript content and process-discovery command output are never logged.
+
+```text
+[   0.123456] codex/account-1 JSON-RPC TX account/rateLimits/read {"id":1,"method":"account/rateLimits/read"}
+[   0.124567] codex/account-1 JSON-RPC RX account/rateLimits/read {"id":1,"result":{"rateLimits":{"primary":{"usedPercent":25}}}}
+```
+
+The log filter matches text without case sensitivity. **Pause log updates** freezes the displayed buffer while collection continues; resume shows the latest retained entries. **Auto-scroll** follows new entries and stops when the user scrolls away from the end. **Clear logs** clears the shared log buffer without removing quota snapshots or metric diagnostics. The buffer retains the newest 1,000 entries; the Metrics tab reports evicted entries. Notifications are coalesced over 100 ms to bound GUI update frequency during traffic bursts.
+
+Payload logging uses an explicit schema allowlist. Credentials, account/session identifiers, filesystem paths, arbitrary strings, error messages, and unknown fields are redacted or omitted before storage and console IPC. Recognized numeric quota/token fields, booleans, timestamps, and fixed protocol values remain visible. Each payload is limited to 4,096 characters, six nesting levels, 20 list entries, and 100 fields per object. Oversized data is marked `[TRUNCATED]`. This is a filtered protocol trace, not an unfiltered packet capture. Close the console independently and reopen it with **Debug diagnostics** in the settings menu. Disabling debug mode closes the console. Select **Refresh** to collect each account's attempt timestamp, elapsed time, fetch status, exception type when a fetch throws, and whether previous data was retained. Provider-reported failures show their status without an exception type.
 
 The dialog also shows account and snapshot counts, the refresh interval, and every normalized usage metric, including metrics for hidden accounts. Observation metrics include the timestamp, age, stale flag, plan, and data availability. Each quota window includes its identifier, label, exact used and remaining percentages, duration, reset timestamp, signed time until reset, and reset-due flag. Today, session, and lifetime token metrics include their source labels and exact total, input, output, cached input, and cache-creation input counts. Credit metrics include the unrounded balance, unlimited flag, availability flag, and reset credits. Missing values show `Unavailable`; reported zero and false values remain distinct. Cache-creation counts are retained separately for Claude while remaining included in input and total tokens. Raw provider fields that the adapters do not retain are outside this view.
 
@@ -31,10 +42,10 @@ Integration diagnostics record the running and completed stages of each account'
 
 Each event includes its UTC timestamp, outcome, elapsed time, and sanitized exception type. The console receives running-stage events before a request finishes. Records are capped at the latest 200 events per account and are cleared when debug mode is disabled, account settings change, or demo mode changes. Demo mode does not access providers and produces no integration events. Stage names and numeric counters are recorded without command arguments, executable paths, endpoint URLs, environment values, RPC bodies, response bodies, authentication tokens, or exception messages.
 
-Debug mode works in release builds and is independent of demo data. It is session-only and does not change saved preferences. Diagnostics stay in memory and exclude raw responses, exception messages, account labels, connection paths, and credentials. Disabling debug mode clears the recorded diagnostics. In HUD mode, the console opens automatically; return to the normal window to access its reopen menu. The console runs as a separate app process and receives an in-memory report from the overlay once per second and when account data changes. It does not load account settings, query providers independently, or write preferences. Closing the overlay ends the console session.
+Debug mode works in release builds and is independent of demo data. It is session-only and does not change saved preferences. Diagnostics stay in memory and exclude raw responses, exception messages, account labels, connection paths, and credentials. Filtered payloads in the Logs tab retain only the explicitly permitted fields. Disabling debug mode clears the recorded diagnostics and logs. In HUD mode, the console opens automatically; return to the normal window to access its reopen menu. The console runs as a separate app process and receives an in-memory report from the overlay once per second and after coalesced account or log updates. It does not load account settings, query providers independently, or write preferences. Closing the overlay ends the console session.
 
 ```sh
-open build/macos/Build/Products/Release/llmqueta.app --args --debug
+open build/macos/Build/Products/Release/llmquota.app --args --debug
 ```
 
 Close any existing instance before launching with arguments. On Windows or Linux, pass `--debug` directly to the executable.
@@ -87,6 +98,8 @@ Use the same snapshot path in Quota. Each account needs its own configuration di
 
 Custom Codex profiles do not inherit the default account's selected thread ID, so their session token total remains unavailable. Custom Codex and Claude profiles exclude inherited API-token overrides that could select a different account. Antigravity profiles store an environment variable name rather than the token value; update the endpoint and environment when that instance restarts. Profiles refer to existing provider logins and do not perform login or account switching inside Quota.
 
+Build products and packages use `llmquota`. The existing `llmqueta` configuration directory and application identifiers remain stable so upgrades keep account settings, window preferences, and Claude bridge snapshots.
+
 Profile metadata is saved in `accounts.json` alongside `preferences.json`: `~/Library/Application Support/llmqueta` on macOS, `%APPDATA%/llmqueta` on Windows, and `$XDG_CONFIG_HOME/llmqueta` or `~/.config/llmqueta` on Linux. The file contains labels and connection locations, not copied provider credentials. An unreadable or invalid account file is preserved and blocks profile writes; repair the file and restart the app. A refresh failure retains only that account's previous data. Changing a connection or deleting a profile discards its old observation.
 
 ### Codex executable
@@ -108,7 +121,7 @@ On Windows PowerShell, create the output directory with `New-Item -ItemType Dire
 {
   "statusLine": {
     "type": "command",
-    "command": "\"/absolute/path/to/llmqueta/build/claude_statusline\""
+    "command": "\"/absolute/path/to/llmquota/build/claude_statusline\""
   }
 }
 ```
@@ -136,7 +149,7 @@ Only literal loopback addresses with an explicit port are accepted. Redirects ar
 Service headers show the reported subscription plan when available in both window and HUD modes. Codex uses the quota response's `planType`. Claude uses the optional `claude auth status --json` lookup; set `LLMQUETA_CLAUDE_EXECUTABLE` when the native CLI is not discoverable. Antigravity uses `GetUserStatus` account plan metadata from its internal local protocol. Missing or failed plan lookups leave the quota visible without a plan label. Model names and usage limits are not used to infer a subscription. The Claude `subscriptionType` field was checked against CLI 2.1.285; older or changed CLI versions may omit it. Antigravity plan metadata uses an internal protocol and may change between releases.
 
 - Select **HUD mode** in the settings menu for a small, undecorated panel. HUD always stays on top and caps opacity at 90%; it preserves the normal window's settings for restoration. Drag its header to move it. Use the expand button or press Escape while the HUD has focus to return to the normal window. The close button remains accessible.
-- The HUD choice is saved when changed through the UI. Launch with `--hud` to start in HUD mode without changing the saved choice. For example: `open build/macos/Build/Products/Release/llmqueta.app --args --hud` after closing an existing instance.
+- The HUD choice is saved when changed through the UI. Launch with `--hud` to start in HUD mode without changing the saved choice. For example: `open build/macos/Build/Products/Release/llmquota.app --args --hud` after closing an existing instance.
 - Providers with reported quota windows, token counts, or credit data appear. Unavailable providers stay hidden; an empty state links to setup when no provider is connected. Previously connected providers retain their last observation with a stale indicator during transient errors.
 - macOS uses its native title bar and traffic-light controls in a separate area above the Flutter content. Other desktop platforms use the in-app close button.
 - Window height adapts to the visible quota, token, and credit rows, with scrolling for longer lists.

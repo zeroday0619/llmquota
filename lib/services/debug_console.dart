@@ -14,6 +14,7 @@ class ProcessDebugConsoleWindow implements DebugConsoleWindow {
   Process? _process;
   QuotaController? _controller;
   Timer? _timer;
+  Timer? _pendingReport;
   Future<void>? _opening;
   int _generation = 0;
 
@@ -46,7 +47,7 @@ class ProcessDebugConsoleWindow implements DebugConsoleWindow {
     final ready = Completer<void>();
     _process = process;
     _controller = controller;
-    controller.addListener(_sendReport);
+    controller.addListener(_queueReport);
     process.stdout
         .transform(utf8.decoder)
         .transform(const LineSplitter())
@@ -60,6 +61,11 @@ class ProcessDebugConsoleWindow implements DebugConsoleWindow {
               request['title'] == 'LLM Quota — Debug console' &&
               !ready.isCompleted) {
             ready.complete();
+          }
+          if (request is Map &&
+              request['clearLogs'] == true &&
+              identical(_process, process)) {
+            controller.clearDebugLogs();
           }
           if (request is Map &&
               request['refresh'] == true &&
@@ -103,13 +109,25 @@ class ProcessDebugConsoleWindow implements DebugConsoleWindow {
     }
   }
 
+  void _queueReport() {
+    if (_process == null || _pendingReport != null) return;
+    // Coalescing notifications keeps bursty provider traffic from flooding IPC.
+    _pendingReport = Timer(const Duration(milliseconds: 100), () {
+      _pendingReport = null;
+      _sendReport();
+    });
+  }
+
   void _sendReport() {
+    _pendingReport?.cancel();
+    _pendingReport = null;
     final process = _process;
     final controller = _controller;
     if (process == null || controller == null) return;
     try {
       process.stdin.writeln(jsonEncode({
         'lines': buildDebugReport(controller, DateTime.now()),
+        'logLines': buildDebugLogLines(controller),
       }));
     } on Object {
       // The child may close between the exit notification and a report update.
@@ -118,9 +136,11 @@ class ProcessDebugConsoleWindow implements DebugConsoleWindow {
   }
 
   void _detach() {
+    _pendingReport?.cancel();
+    _pendingReport = null;
     _timer?.cancel();
     _timer = null;
-    _controller?.removeListener(_sendReport);
+    _controller?.removeListener(_queueReport);
     _controller = null;
     _process = null;
   }

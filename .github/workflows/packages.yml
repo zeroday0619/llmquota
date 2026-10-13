@@ -22,13 +22,13 @@ jobs:
       - run: flutter pub get
       - run: flutter build macos --release
       - name: Package macOS application
-        run: python3 tool/package_macos.py --app build/macos/Build/Products/Release/llmqueta.app --output dist
+        run: python3 tool/package_macos.py --app build/macos/Build/Products/Release/llmquota.app --output dist
       - name: Record package checksums
         run: cd dist && shasum -a 256 *.dmg *.zip > SHA256SUMS
       - name: Upload macOS packages
         uses: actions/upload-artifact@v4
         with:
-          name: llmqueta-macos
+          name: llmquota-macos
           path: dist/*
           if-no-files-found: error
 
@@ -90,11 +90,11 @@ jobs:
           docker run --rm -v "$PWD/dist:/packages:ro" debian:bookworm-slim sh -ec '
             apt-get update
             apt-get install -y /packages/*.deb
-            dpkg-query -W llmqueta
-            test -x /usr/bin/llmqueta
-            export LD_LIBRARY_PATH=/usr/lib/llmqueta/lib
-            ldd /usr/lib/llmqueta/llmqueta > /tmp/dependencies
-            for library in /usr/lib/llmqueta/lib/*.so; do
+            dpkg-query -W llmquota
+            test -x /usr/bin/llmquota
+            export LD_LIBRARY_PATH=/usr/lib/llmquota/lib
+            ldd /usr/lib/llmquota/llmquota > /tmp/dependencies
+            for library in /usr/lib/llmquota/lib/*.so; do
               case "$library" in */libapp.so) continue ;; esac
               ldd "$library" >> /tmp/dependencies
             done
@@ -105,11 +105,11 @@ jobs:
         run: |
           docker run --rm -v "$PWD/dist:/packages:ro" fedora:43 sh -ec '
             dnf install -y /packages/*.rpm
-            rpm -q llmqueta
-            test -x /usr/bin/llmqueta
-            export LD_LIBRARY_PATH=/usr/lib/llmqueta/lib
-            ldd /usr/lib/llmqueta/llmqueta > /tmp/dependencies
-            for library in /usr/lib/llmqueta/lib/*.so; do
+            rpm -q llmquota
+            test -x /usr/bin/llmquota
+            export LD_LIBRARY_PATH=/usr/lib/llmquota/lib
+            ldd /usr/lib/llmquota/llmquota > /tmp/dependencies
+            for library in /usr/lib/llmquota/lib/*.so; do
               case "$library" in */libapp.so) continue ;; esac
               ldd "$library" >> /tmp/dependencies
             done
@@ -121,7 +121,7 @@ jobs:
           cd "$RUNNER_TEMP"
           "$GITHUB_WORKSPACE"/dist/*.AppImage --appimage-extract
           test -x squashfs-root/AppRun
-          test -x squashfs-root/usr/bin/llmqueta
+          test -x squashfs-root/usr/bin/llmquota
       - name: Archive bundle for Arch packaging
         run: tar -C build/linux/${{ matrix.flutter_architecture }}/release/bundle -czf bundle-${{ matrix.architecture }}.tar.gz .
       - uses: actions/upload-artifact@v4
@@ -134,7 +134,7 @@ jobs:
       - name: Upload Linux packages
         uses: actions/upload-artifact@v4
         with:
-          name: llmqueta-linux-${{ matrix.architecture }}
+          name: llmquota-linux-${{ matrix.architecture }}
           path: dist/*
           if-no-files-found: error
 
@@ -173,11 +173,11 @@ jobs:
           docker run --rm -v "$PWD/dist:/packages:ro" archlinux:base bash -euc '
             pacman -Syu --noconfirm
             pacman -U --noconfirm /packages/*.pkg.tar.zst
-            pacman -Q llmqueta
-            test -x /usr/bin/llmqueta
-            export LD_LIBRARY_PATH=/usr/lib/llmqueta/lib
-            ldd /usr/lib/llmqueta/llmqueta > /tmp/dependencies
-            for library in /usr/lib/llmqueta/lib/*.so; do
+            pacman -Q llmquota
+            test -x /usr/bin/llmquota
+            export LD_LIBRARY_PATH=/usr/lib/llmquota/lib
+            ldd /usr/lib/llmquota/llmquota > /tmp/dependencies
+            for library in /usr/lib/llmquota/lib/*.so; do
               case "$library" in */libapp.so) continue ;; esac
               ldd "$library" >> /tmp/dependencies
             done
@@ -188,6 +188,6 @@ jobs:
         run: cd dist && sha256sum *.pkg.tar.zst > SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
-          name: llmqueta-arch-${{ matrix.architecture }}
+          name: llmquota-arch-${{ matrix.architecture }}
           path: dist/*
           if-no-files-found: error

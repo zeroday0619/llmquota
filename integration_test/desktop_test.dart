@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:window_manager/window_manager.dart';
 
-import 'package:llmqueta/main.dart' as application;
+import 'package:llmquota/main.dart' as application;
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();

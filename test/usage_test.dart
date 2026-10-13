@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llmqueta/models/quota.dart';
-import 'package:llmqueta/models/usage.dart';
+import 'package:llmquota/models/quota.dart';
+import 'package:llmquota/models/usage.dart';
 
 void main() {
   final now = DateTime(2026, 10, 8, 14);

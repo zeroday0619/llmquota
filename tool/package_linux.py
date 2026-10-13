@@ -30,7 +30,7 @@ def normalize_version(value):
 
 
 def validate_bundle(bundle, architecture):
-    for relative in ("llmqueta", "lib/libflutter_linux_gtk.so", "lib/libapp.so", "data/icudtl.dat", "data/flutter_assets"):
+    for relative in ("llmquota", "lib/libflutter_linux_gtk.so", "lib/libapp.so", "data/icudtl.dat", "data/flutter_assets"):
         if not (bundle / relative).exists():
             raise ValueError(f"missing Flutter release bundle entry: {relative}")
     for entry in bundle.rglob("*"):
@@ -42,26 +42,26 @@ def validate_bundle(bundle, architecture):
             if header[:4] == b"\x7fELF":
                 if len(header) < 20 or header[4:6] != b"\x02\x01" or struct.unpack("<H", header[18:20])[0] != ARCHITECTURES[architecture][0]:
                     raise ValueError(f"ELF architecture mismatch: {entry}")
-            elif entry in (bundle / "llmqueta", bundle / "lib/libapp.so", bundle / "lib/libflutter_linux_gtk.so"):
+            elif entry in (bundle / "llmquota", bundle / "lib/libapp.so", bundle / "lib/libflutter_linux_gtk.so"):
                 raise ValueError(f"bundle binary must be a 64-bit Linux ELF binary: {entry}")
-    if not os.access(bundle / "llmqueta", os.X_OK):
+    if not os.access(bundle / "llmquota", os.X_OK):
         raise ValueError("bundle executable is not executable")
 
 
 def stage_payload(bundle, destination):
-    application = destination / "usr/lib/llmqueta"
+    application = destination / "usr/lib/llmquota"
     application.parent.mkdir(parents=True)
     shutil.copytree(bundle, application, symlinks=True)
     for source, relative in (
-        (ROOT / "packaging/linux/llmqueta", "usr/bin/llmqueta"),
-        (ROOT / "packaging/linux/llmqueta.desktop", "usr/share/applications/llmqueta.desktop"),
-        (ROOT / "packaging/assets/llmqueta.png", "usr/share/icons/hicolor/512x512/apps/llmqueta.png"),
-        (ROOT / "LICENSE", "usr/share/licenses/llmqueta/LICENSE"),
+        (ROOT / "packaging/linux/llmquota", "usr/bin/llmquota"),
+        (ROOT / "packaging/linux/llmquota.desktop", "usr/share/applications/llmquota.desktop"),
+        (ROOT / "packaging/assets/llmquota.png", "usr/share/icons/hicolor/512x512/apps/llmquota.png"),
+        (ROOT / "LICENSE", "usr/share/licenses/llmquota/LICENSE"),
     ):
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
-        target.chmod(0o755 if relative == "usr/bin/llmqueta" else 0o644)
+        target.chmod(0o755 if relative == "usr/bin/llmquota" else 0o644)
 
 
 def run(arguments, **kwargs):
@@ -84,31 +84,31 @@ def build_package(arguments, work):
         control = payload / "DEBIAN/control"
         control.parent.mkdir()
         control.write_text(
-            f"Package: llmqueta\nVersion: {version}\nArchitecture: {ARCHITECTURES[architecture][1]}\n"
+            f"Package: llmquota\nVersion: {version}\nArchitecture: {ARCHITECTURES[architecture][1]}\n"
             "Maintainer: LLM Quota contributors\nSection: utils\nPriority: optional\n"
             "Depends: libgtk-3-0, libstdc++6, libc6\n"
             "Description: Desktop overlay for AI subscription quotas and reset times\n"
         )
-        copyright_file = payload / "usr/share/doc/llmqueta/copyright"
+        copyright_file = payload / "usr/share/doc/llmquota/copyright"
         copyright_file.parent.mkdir(parents=True)
         shutil.copyfile(ROOT / "LICENSE", copyright_file)
-        artifact = work / f"llmqueta_{version}_{ARCHITECTURES[architecture][1]}.deb"
+        artifact = work / f"llmquota_{version}_{ARCHITECTURES[architecture][1]}.deb"
         run([required_tool("dpkg-deb"), "--root-owner-group", "--build", payload, artifact])
     elif arguments.format == "rpm":
         for directory in ("BUILD", "BUILDROOT", "RPMS", "SOURCES", "SPECS", "SRPMS"):
             (work / directory).mkdir()
         with tarfile.open(work / "SOURCES/payload.tar.gz", "w:gz") as archive:
             archive.add(payload / "usr", arcname="usr")
-        spec = work / "SPECS/llmqueta.spec"
+        spec = work / "SPECS/llmquota.spec"
         spec.write_text(
-            f"Name: llmqueta\nVersion: {version}\nRelease: 1\nSummary: AI subscription quota overlay\n"
-            "License: Unlicense\nURL: https://github.com/zeroday0619/llmqueta\nSource0: payload.tar.gz\n"
+            f"Name: llmquota\nVersion: {version}\nRelease: 1\nSummary: AI subscription quota overlay\n"
+            "License: Unlicense\nURL: https://github.com/zeroday0619/llmquota\nSource0: payload.tar.gz\n"
             "Requires: gtk3, libstdc++, glibc\n%global debug_package %{nil}\n"
             "%global __strip /bin/true\n%global __brp_strip /bin/true\n"
             "%description\nDesktop overlay for AI subscription quotas and reset times.\n"
             "%prep\n%setup -q -c\n%build\n%install\nmkdir -p %{buildroot}\ncp -a usr %{buildroot}/\n"
-            "%files\n/usr/bin/llmqueta\n/usr/lib/llmqueta\n/usr/share/applications/llmqueta.desktop\n"
-            "/usr/share/icons/hicolor/512x512/apps/llmqueta.png\n%license /usr/share/licenses/llmqueta/LICENSE\n"
+            "%files\n/usr/bin/llmquota\n/usr/lib/llmquota\n/usr/share/applications/llmquota.desktop\n"
+            "/usr/share/icons/hicolor/512x512/apps/llmquota.png\n%license /usr/share/licenses/llmquota/LICENSE\n"
         )
         run([required_tool("rpmbuild"), "-bb", "--target", architecture, "--define", f"_topdir {work}", spec])
         artifact, = (work / "RPMS").rglob("*.rpm")
@@ -120,8 +120,8 @@ def build_package(arguments, work):
         import hashlib
         digest = hashlib.sha256((work / "payload.tar.gz").read_bytes()).hexdigest()
         (work / "PKGBUILD").write_text(
-            f"pkgname=llmqueta\npkgver={version}\npkgrel=1\npkgdesc='AI subscription quota overlay'\n"
-            f"arch=('{architecture}')\nurl='https://github.com/zeroday0619/llmqueta'\nlicense=('Unlicense')\n"
+            f"pkgname=llmquota\npkgver={version}\npkgrel=1\npkgdesc='AI subscription quota overlay'\n"
+            f"arch=('{architecture}')\nurl='https://github.com/zeroday0619/llmquota'\nlicense=('Unlicense')\n"
             "depends=('gtk3' 'gcc-libs' 'glibc')\noptions=('!strip' '!debug')\nsource=('payload.tar.gz')\n"
             f"sha256sums=('{digest}')\npackage() {{\n  cp -a \"$srcdir/usr\" \"$pkgdir/\"\n}}\n"
         )
@@ -143,20 +143,20 @@ def build_package(arguments, work):
         # https://github.com/linuxdeploy/linuxdeploy/issues/72
         environment = {**os.environ, "ARCH": architecture, "DEPLOY_GTK_VERSION": "3", "NO_STRIP": "1",
                        "PATH": f"{plugin.parent}{os.pathsep}{os.environ.get('PATH', '')}"}
-        launcher = payload / "usr/bin/llmqueta"
+        launcher = payload / "usr/bin/llmquota"
         # linuxdeploy must install an ELF executable before patching its dependencies.
         launcher.unlink()
-        command = [linuxdeploy, "--appdir", payload, "--executable", payload / "usr/lib/llmqueta/llmqueta",
-                   "--desktop-file", payload / "usr/share/applications/llmqueta.desktop",
-                   "--icon-file", payload / "usr/share/icons/hicolor/512x512/apps/llmqueta.png", "--plugin", "gtk"]
-        for library in sorted((payload / "usr/lib/llmqueta/lib").glob("*.so*")):
+        command = [linuxdeploy, "--appdir", payload, "--executable", payload / "usr/lib/llmquota/llmquota",
+                   "--desktop-file", payload / "usr/share/applications/llmquota.desktop",
+                   "--icon-file", payload / "usr/share/icons/hicolor/512x512/apps/llmquota.png", "--plugin", "gtk"]
+        for library in sorted((payload / "usr/lib/llmquota/lib").glob("*.so*")):
             command.extend(["--library", library])
         run(command, env=environment)
         # Flutter locates assets relative to its executable, so retain the bundle layout.
         launcher.unlink(missing_ok=True)
-        shutil.copyfile(ROOT / "packaging/linux/llmqueta", launcher)
+        shutil.copyfile(ROOT / "packaging/linux/llmquota", launcher)
         launcher.chmod(0o755)
-        artifact = work / f"llmqueta-{version}-{architecture}.AppImage"
+        artifact = work / f"llmquota-{version}-{architecture}.AppImage"
         run([appimagetool, "--runtime-file", arguments.runtime_file.resolve(), payload, artifact], env=environment)
     if not artifact.is_file() or artifact.stat().st_size == 0:
         raise ValueError("packaging tool did not create a nonempty artifact")
@@ -186,7 +186,7 @@ def main():
         arguments.output = arguments.output.resolve()
         validate_bundle(arguments.bundle, arguments.architecture)
         arguments.output.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix="llmqueta-package-") as directory:
+        with tempfile.TemporaryDirectory(prefix="llmquota-package-") as directory:
             print(build_package(arguments, Path(directory)))
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"Packaging failed: {error}\n")

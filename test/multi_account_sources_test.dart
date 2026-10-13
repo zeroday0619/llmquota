@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llmqueta/models/quota.dart';
-import 'package:llmqueta/models/quota_account.dart';
-import 'package:llmqueta/services/quota_sources.dart';
+import 'package:llmquota/models/quota.dart';
+import 'package:llmquota/models/quota_account.dart';
+import 'package:llmquota/services/quota_sources.dart';
 
 void main() {
   test('Claude accounts use distinct snapshots and configuration directories',

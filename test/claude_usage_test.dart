@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llmqueta/services/claude_usage.dart';
+import 'package:llmquota/services/claude_usage.dart';
 
 void main() {
   late Directory directory;

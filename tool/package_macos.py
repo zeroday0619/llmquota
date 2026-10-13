@@ -61,12 +61,12 @@ def main() -> None:
     version = validate_app(app)
     output = arguments.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    stem = f'llmqueta-{version}-macos-universal'
+    stem = f'llmquota-{version}-macos-universal'
     targets = [output / f'{stem}{suffix}' for suffix in ('.dmg', '.zip', '.sha256')]
     for target in targets:
         if target.exists():
             raise FileExistsError(f'Refusing to overwrite {target}')
-    with tempfile.TemporaryDirectory(prefix='llmqueta-macos-') as directory:
+    with tempfile.TemporaryDirectory(prefix='llmquota-macos-') as directory:
         temporary = Path(directory)
         staging = temporary / 'stage'
         staging.mkdir()
@@ -75,7 +75,7 @@ def main() -> None:
         (staging / 'Applications').symlink_to('/Applications')
         disk = temporary / targets[0].name
         archive = temporary / targets[1].name
-        run('/usr/bin/hdiutil', 'create', '-volname', 'llmqueta', '-srcfolder',
+        run('/usr/bin/hdiutil', 'create', '-volname', 'llmquota', '-srcfolder',
             str(staging), '-format', 'UDZO', '-ov', str(disk))
         run('/usr/bin/hdiutil', 'verify', str(disk))
         run('/usr/bin/ditto', '-c', '-k', '--sequesterRsrc', str(staging), str(archive))

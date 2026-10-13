@@ -14,6 +14,8 @@ List<String> buildDebugReport(QuotaController controller, DateTime now) => [
       'Collected snapshots: ${controller.snapshots.length}',
       'Visible accounts: ${controller.visibleSnapshots.length}',
       'Recorded diagnostics: ${controller.diagnostics.length}',
+      'Buffered log entries: ${controller.debugLogs.length} / 1000',
+      'Evicted log entries: ${controller.droppedDebugLogCount}',
       'Recorded integration events: ${controller.integrationDiagnostics.values.fold<int>(0, (count, events) => count + events.length)}',
       'Auto-refresh interval: 60 seconds',
       'Data mode: ${controller.demo ? 'demo' : 'live'}',
@@ -54,4 +56,8 @@ List<String> buildIntegrationDiagnosticLines(
         for (final metric in event.metrics.entries)
           '${metric.key}: ${metric.value}',
       ],
+    ];
+
+List<String> buildDebugLogLines(QuotaController controller) => [
+      for (final entry in controller.debugLogs) entry.formatted,
     ];

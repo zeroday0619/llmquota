@@ -2,12 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llmqueta/account_dialog.dart';
-import 'package:llmqueta/app.dart';
-import 'package:llmqueta/models/quota.dart';
-import 'package:llmqueta/models/quota_account.dart';
-import 'package:llmqueta/services/preferences.dart';
-import 'package:llmqueta/services/quota_controller.dart';
+import 'package:llmquota/account_dialog.dart';
+import 'package:llmquota/app.dart';
+import 'package:llmquota/models/quota.dart';
+import 'package:llmquota/models/quota_account.dart';
+import 'package:llmquota/services/preferences.dart';
+import 'package:llmquota/services/quota_controller.dart';
 
 class AccountTestWindow implements OverlayWindow {
   @override

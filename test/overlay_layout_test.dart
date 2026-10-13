@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llmqueta/main.dart';
-import 'package:llmqueta/models/quota.dart';
-import 'package:llmqueta/models/usage.dart';
-import 'package:llmqueta/services/quota_controller.dart';
+import 'package:llmquota/main.dart';
+import 'package:llmquota/models/quota.dart';
+import 'package:llmquota/models/usage.dart';
+import 'package:llmquota/services/quota_controller.dart';
 
 void main() {
   test('credit rows increase HUD height without requiring quota windows', () {

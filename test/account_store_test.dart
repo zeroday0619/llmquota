@@ -1,9 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llmqueta/models/quota.dart';
-import 'package:llmqueta/models/quota_account.dart';
-import 'package:llmqueta/services/account_store.dart';
+import 'package:llmquota/models/quota.dart';
+import 'package:llmquota/models/quota_account.dart';
+import 'package:llmquota/services/account_store.dart';
 
 void main() {
   late Directory directory;

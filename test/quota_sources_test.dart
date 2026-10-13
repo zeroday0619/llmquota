@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llmqueta/models/quota.dart';
-import 'package:llmqueta/services/app_paths.dart';
-import 'package:llmqueta/services/quota_sources.dart';
+import 'package:llmquota/models/quota.dart';
+import 'package:llmquota/services/app_paths.dart';
+import 'package:llmquota/services/quota_sources.dart';
 
 void main() {
   test('Codex search respects PATH order and GUI installation locations', () {
@@ -57,7 +57,7 @@ void main() {
   test('Codex resolver rejects a missing explicit override without fallback',
       () async {
     final temporary =
-        await Directory.systemTemp.createTemp('llmqueta-resolver-');
+        await Directory.systemTemp.createTemp('llmquota-resolver-');
     addTearDown(() => temporary.delete(recursive: true));
     final executable = File('${temporary.path}/codex');
     await executable.writeAsString('#!/bin/sh\nexit 0\n');
@@ -110,7 +110,7 @@ void main() {
 
   test('missing integrations are unavailable rather than fabricated', () async {
     final temporary = await Directory.systemTemp.createTemp(
-      'llmqueta-sources-',
+      'llmquota-sources-',
     );
     addTearDown(() => temporary.delete(recursive: true));
     final sources = QuotaSources(
@@ -124,7 +124,7 @@ void main() {
   });
 
   test('Claude local tokens remain available without a quota bridge', () async {
-    final temporary = await Directory.systemTemp.createTemp('llmqueta-claude-');
+    final temporary = await Directory.systemTemp.createTemp('llmquota-claude-');
     addTearDown(() => temporary.delete(recursive: true));
     final transcript =
         File('${temporary.path}/.claude/projects/test/session.jsonl');
@@ -154,7 +154,7 @@ void main() {
     'Claude observations preserve age and reject invalid timestamps',
     () async {
       final temporary = await Directory.systemTemp.createTemp(
-        'llmqueta-sources-',
+        'llmquota-sources-',
       );
       addTearDown(() => temporary.delete(recursive: true));
       final paths = AppPaths(
@@ -214,7 +214,7 @@ void main() {
   test('Claude account metadata enriches quota without replacing observations',
       () async {
     final temporary =
-        await Directory.systemTemp.createTemp('llmqueta-claude-plan-');
+        await Directory.systemTemp.createTemp('llmquota-claude-plan-');
     addTearDown(() => temporary.delete(recursive: true));
     final paths = AppPaths(
         environment: {'HOME': temporary.path}, operatingSystem: 'macos');
@@ -508,7 +508,7 @@ void main() {
   );
 
   test('Codex RPC handshake completes and child is terminated', () async {
-    final temporary = await Directory.systemTemp.createTemp('llmqueta-rpc-');
+    final temporary = await Directory.systemTemp.createTemp('llmquota-rpc-');
     addTearDown(() => temporary.delete(recursive: true));
     final executable = File('${temporary.path}/mock-codex');
     final log = File('${temporary.path}/requests');
@@ -554,7 +554,7 @@ while :; do :; done
   for (final behavior in ['error', 'timeout', 'session', 'quota-error']) {
     test('Codex optional usage preserves quota for $behavior', () async {
       final temporary =
-          await Directory.systemTemp.createTemp('llmqueta-usage-');
+          await Directory.systemTemp.createTemp('llmquota-usage-');
       addTearDown(() => temporary.delete(recursive: true));
       final executable = File('${temporary.path}/mock-codex');
       final log = File('${temporary.path}/requests');

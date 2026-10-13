@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llmqueta/app.dart';
-import 'package:llmqueta/services/debug_console.dart';
-import 'package:llmqueta/services/preferences.dart';
-import 'package:llmqueta/services/quota_controller.dart';
+import 'package:llmquota/app.dart';
+import 'package:llmquota/services/debug_console.dart';
+import 'package:llmquota/services/preferences.dart';
+import 'package:llmquota/services/quota_controller.dart';
 
 import 'widget_test.dart' as fixtures show TestWindow;
 

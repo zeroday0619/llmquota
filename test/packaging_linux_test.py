@@ -22,7 +22,7 @@ class LinuxPackagingTests(unittest.TestCase):
         (self.bundle / "lib").mkdir(parents=True)
         (self.bundle / "data/flutter_assets").mkdir(parents=True)
         (self.bundle / "data/icudtl.dat").write_bytes(b"fixture")
-        self.write_elf("llmqueta", 62)
+        self.write_elf("llmquota", 62)
         self.write_elf("lib/libflutter_linux_gtk.so", 62)
         self.write_elf("lib/libapp.so", 62)
 
@@ -38,7 +38,7 @@ class LinuxPackagingTests(unittest.TestCase):
         packaging.validate_bundle(self.bundle, "x86_64")
 
     def test_valid_arm_bundle(self):
-        for entry in ("llmqueta", "lib/libapp.so", "lib/libflutter_linux_gtk.so"):
+        for entry in ("llmquota", "lib/libapp.so", "lib/libflutter_linux_gtk.so"):
             self.write_elf(entry, 183)
         packaging.validate_bundle(self.bundle, "aarch64")
 
@@ -67,10 +67,10 @@ class LinuxPackagingTests(unittest.TestCase):
         self.write_elf("claude_statusline", 62)
         destination = Path(self.temporary.name) / "stage"
         packaging.stage_payload(self.bundle, destination)
-        self.assertTrue((destination / "usr/lib/llmqueta/claude_statusline").exists())
-        self.assertTrue((destination / "usr/lib/llmqueta/data/flutter_assets").is_dir())
-        self.assertTrue((destination / "usr/bin/llmqueta").stat().st_mode & 0o111)
-        self.assertTrue((destination / "usr/share/applications/llmqueta.desktop").exists())
+        self.assertTrue((destination / "usr/lib/llmquota/claude_statusline").exists())
+        self.assertTrue((destination / "usr/lib/llmquota/data/flutter_assets").is_dir())
+        self.assertTrue((destination / "usr/bin/llmquota").stat().st_mode & 0o111)
+        self.assertTrue((destination / "usr/share/applications/llmquota.desktop").exists())
 
 
     def test_non_elf_library_rejected(self):
@@ -115,11 +115,11 @@ class LinuxPackagingTests(unittest.TestCase):
             self.assertIn("--ignorearch", command)
             self.assertIn("CARCH=aarch64", (work / "makepkg.conf").read_text())
             self.assertIn("arch=('aarch64')", (work / "PKGBUILD").read_text())
-            (work / "llmqueta-0.1.0.1-1-aarch64.pkg.tar.zst").write_bytes(b"synthetic archive")
+            (work / "llmquota-0.1.0.1-1-aarch64.pkg.tar.zst").write_bytes(b"synthetic archive")
 
         with patch.object(packaging.os, "geteuid", return_value=1000), patch.object(packaging, "required_tool", return_value="makepkg"), patch.object(packaging, "run", side_effect=fake_makepkg):
             artifact = packaging.build_package(arguments, work)
-        self.assertEqual(artifact.name, "llmqueta-0.1.0.1-1-aarch64.pkg.tar.zst")
+        self.assertEqual(artifact.name, "llmquota-0.1.0.1-1-aarch64.pkg.tar.zst")
 
 
     def test_appimage_deploys_elf_before_restoring_launcher(self):
@@ -137,7 +137,7 @@ class LinuxPackagingTests(unittest.TestCase):
 
         def fake_tool(command, **options):
             calls.append(command[0])
-            launcher = work / "payload/usr/bin/llmqueta"
+            launcher = work / "payload/usr/bin/llmquota"
             if command[0] == "linuxdeploy":
                 self.assertFalse(launcher.exists())
                 # Reject unsupported switches instead of accepting arbitrary mocked commands.
@@ -156,14 +156,14 @@ class LinuxPackagingTests(unittest.TestCase):
                 launcher.write_bytes(executable.read_bytes())
             else:
                 self.assertTrue(launcher.read_text().startswith("#!/bin/sh"))
-                self.assertIn('"$APPDIR/usr/lib/llmqueta"', launcher.read_text())
+                self.assertIn('"$APPDIR/usr/lib/llmquota"', launcher.read_text())
                 self.assertIn("--runtime-file", command)
                 Path(command[-1]).write_bytes(b"synthetic AppImage")
 
         with patch.object(packaging, "required_tool", side_effect=lambda value: value), patch.object(packaging, "run", side_effect=fake_tool):
             artifact = packaging.build_package(arguments, work)
         self.assertEqual(calls, ["linuxdeploy", "appimagetool"])
-        self.assertEqual(artifact.name, "llmqueta-0.1.0.1-x86_64.AppImage")
+        self.assertEqual(artifact.name, "llmquota-0.1.0.1-x86_64.AppImage")
 
 
 if __name__ == "__main__":

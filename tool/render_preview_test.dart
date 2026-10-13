@@ -2,16 +2,16 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:llmqueta/models/quota.dart';
-import 'package:llmqueta/models/quota_account.dart';
-import 'package:llmqueta/models/usage.dart';
-import 'package:llmqueta/main.dart' show overlayHeight;
+import 'package:llmquota/models/quota.dart';
+import 'package:llmquota/models/quota_account.dart';
+import 'package:llmquota/models/usage.dart';
+import 'package:llmquota/main.dart' show overlayHeight;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llmqueta/app.dart';
-import 'package:llmqueta/services/preferences.dart';
-import 'package:llmqueta/services/quota_controller.dart';
+import 'package:llmquota/app.dart';
+import 'package:llmquota/services/preferences.dart';
+import 'package:llmquota/services/quota_controller.dart';
 
 class PreviewWindow implements OverlayWindow {
   @override

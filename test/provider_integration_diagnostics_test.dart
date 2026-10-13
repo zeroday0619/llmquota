@@ -2,11 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llmqueta/debug_report.dart';
-import 'package:llmqueta/models/quota.dart';
-import 'package:llmqueta/models/quota_account.dart';
-import 'package:llmqueta/services/quota_controller.dart';
-import 'package:llmqueta/services/quota_sources.dart';
+import 'package:llmquota/debug_report.dart';
+import 'package:llmquota/models/quota.dart';
+import 'package:llmquota/models/quota_account.dart';
+import 'package:llmquota/services/quota_controller.dart';
+import 'package:llmquota/services/quota_sources.dart';
 
 void main() {
   test('Antigravity traces failed HTTP status and successful fallback metrics',
@@ -85,7 +85,7 @@ void main() {
 
   test('Codex traces RPC error codes and preserves usage without raw details',
       () async {
-    final temporary = await Directory.systemTemp.createTemp('llmqueta-trace-');
+    final temporary = await Directory.systemTemp.createTemp('llmquota-trace-');
     addTearDown(() => temporary.delete(recursive: true));
     final executable = File('${temporary.path}/mock-codex');
     await executable.writeAsString(r'''#!/bin/sh

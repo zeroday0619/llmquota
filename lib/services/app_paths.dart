@@ -8,6 +8,7 @@ class AppPaths {
   final Map<String, String> environment;
   final String operatingSystem;
 
+  // Existing installations and Claude bridges share this legacy directory.
   String get configurationDirectory {
     final home = environment['HOME'] ?? environment['USERPROFILE'];
     if (operatingSystem == 'windows') {

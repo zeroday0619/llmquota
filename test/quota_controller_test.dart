@@ -2,10 +2,10 @@ import 'dart:io';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llmqueta/models/quota.dart';
-import 'package:llmqueta/models/quota_account.dart';
-import 'package:llmqueta/models/usage.dart';
-import 'package:llmqueta/services/quota_controller.dart';
+import 'package:llmquota/models/quota.dart';
+import 'package:llmquota/models/quota_account.dart';
+import 'package:llmquota/models/usage.dart';
+import 'package:llmquota/services/quota_controller.dart';
 
 QuotaSnapshot measurement(
   ProviderKind provider, {

@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llmqueta/models/integration_diagnostic.dart';
-import 'package:llmqueta/models/quota.dart';
-import 'package:llmqueta/models/quota_account.dart';
-import 'package:llmqueta/services/quota_controller.dart';
+import 'package:llmquota/models/integration_diagnostic.dart';
+import 'package:llmquota/models/quota.dart';
+import 'package:llmquota/models/quota_account.dart';
+import 'package:llmquota/services/quota_controller.dart';
 
 QuotaSnapshot snapshot(QuotaAccount account) => QuotaSnapshot(
       provider: account.provider,

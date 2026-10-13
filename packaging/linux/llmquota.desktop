@@ -2,8 +2,8 @@
 Type=Application
 Name=LLM Quota
 Comment=AI subscription quota overlay
-Exec=llmqueta
-Icon=llmqueta
+Exec=llmquota
+Icon=llmquota
 Terminal=false
 Categories=Utility;
 StartupWMClass=dev.zeroday0619.llmqueta

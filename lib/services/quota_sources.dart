@@ -4,6 +4,7 @@ import 'dart:io';
 
 import '../models/quota.dart';
 import '../models/integration_diagnostic.dart';
+import '../models/communication_diagnostic.dart';
 import '../models/quota_account.dart';
 import '../models/usage.dart';
 import 'app_paths.dart';
@@ -150,6 +151,7 @@ class QuotaSources {
     StreamSubscription<String>? output;
     StreamSubscription<List<int>>? errors;
     final pending = <int, Completer<Map<String, dynamic>>>{};
+    final pendingMethods = <int, String>{};
     try {
       final executable = await integrationStep('codex.executable.resolve',
           () => resolveCodexExecutable(environment: environment),
@@ -178,12 +180,22 @@ class QuotaSources {
             (line) {
               try {
                 final message = jsonDecode(line);
+                final operation = message is Map
+                    ? pendingMethods[message['id']] ??
+                        _codexNotificationOperation(message['method'])
+                    : 'message';
+                recordCommunication('JSON-RPC', 'RX', operation,
+                    payload: message);
                 if (message is Map<String, dynamic> && message['id'] is int) {
                   final waiter = pending.remove(message['id']);
+                  pendingMethods.remove(message['id']);
                   if (waiter != null && !waiter.isCompleted)
                     waiter.complete(message);
                 }
               } on FormatException {
+                recordCommunication('JSON-RPC', 'RX', 'invalidMessage',
+                    bytes: utf8.encode(line).length,
+                    payload: {'parseError': true});
                 // Unrelated process output cannot establish a quota measurement.
               }
             },
@@ -194,6 +206,7 @@ class QuotaSources {
                   waiter.completeError(StateError('Codex stopped.'));
               }
               pending.clear();
+              pendingMethods.clear();
             },
           );
       Future<Map<String, dynamic>> request(
@@ -203,17 +216,19 @@ class QuotaSources {
       ]) {
         final waiter = Completer<Map<String, dynamic>>();
         pending[id] = waiter;
-        running.stdin.writeln(
-          jsonEncode({
-            'id': id,
-            'method': method,
-            if (parameters != null) 'params': parameters,
-          }),
-        );
+        pendingMethods[id] = method;
+        final message = {
+          'id': id,
+          'method': method,
+          if (parameters != null) 'params': parameters,
+        };
+        running.stdin.writeln(jsonEncode(message));
+        recordCommunication('JSON-RPC', 'TX', method, payload: message);
         return integrationStep(
           'codex.rpc.$method',
           () => waiter.future.timeout(timeout).whenComplete(() {
             pending.remove(id);
+            pendingMethods.remove(id);
           }),
           available: (response) =>
               !response.containsKey('error') && response['result'] != null,
@@ -230,7 +245,7 @@ class QuotaSources {
       final initialization = await request(0, 'initialize', {
         'capabilities': {'experimentalApi': true},
         'clientInfo': {
-          'name': 'llmqueta',
+          'name': 'llmquota',
           'title': 'LLM Quota',
           'version': '0.1.0',
         },
@@ -240,6 +255,8 @@ class QuotaSources {
       running.stdin.writeln(
         jsonEncode({'method': 'initialized', 'params': <String, dynamic>{}}),
       );
+      recordCommunication('JSON-RPC', 'TX', 'initialized',
+          payload: {'method': 'initialized', 'params': <String, dynamic>{}});
       QuotaSnapshot snapshot;
       try {
         final response = await request(1, 'account/rateLimits/read');
@@ -374,7 +391,17 @@ class QuotaSources {
       final content = await integrationStep(
           'claude.snapshot.read', () => file.readAsString());
       final decoded = await integrationStep('claude.snapshot.decode', () async {
-        final decoded = jsonDecode(content);
+        Object? decoded;
+        try {
+          decoded = jsonDecode(content);
+        } on FormatException {
+          recordCommunication('LOCAL FILE', 'READ', 'claude.snapshot',
+              bytes: utf8.encode(content).length,
+              payload: {'parseError': true});
+          rethrow;
+        }
+        recordCommunication('LOCAL FILE', 'READ', 'claude.snapshot',
+            bytes: utf8.encode(content).length, payload: decoded);
         if (decoded is! Map<String, dynamic>) throw const FormatException();
         return decoded;
       });
@@ -433,10 +460,24 @@ class QuotaSources {
           () => resolveClaudeExecutable(environment: environment),
           available: (executable) => executable != null);
       if (executable == null) return null;
-      final decoded = await integrationStep(
-          'claude.auth.status',
-          () async => jsonDecode(
-              await _runDiscovery(executable, ['auth', 'status', '--json'])),
+      final decoded = await integrationStep('claude.auth.status', () async {
+        recordCommunication('CLI', 'TX', 'claude.auth.status', payload: {
+          'arguments': ['auth', 'status', '--json']
+        });
+        final output =
+            await _runDiscovery(executable, ['auth', 'status', '--json']);
+        Object? decoded;
+        try {
+          decoded = jsonDecode(output);
+        } on FormatException {
+          recordCommunication('CLI', 'RX', 'claude.auth.status',
+              bytes: utf8.encode(output).length, payload: {'parseError': true});
+          rethrow;
+        }
+        recordCommunication('CLI', 'RX', 'claude.auth.status',
+            bytes: utf8.encode(output).length, payload: decoded);
+        return decoded;
+      },
           available: (decoded) =>
               decoded is Map &&
               decoded['loggedIn'] == true &&
@@ -690,13 +731,25 @@ class QuotaSources {
           if (token != null && token.isNotEmpty)
             request.headers.set('X-Codeium-Csrf-Token', token);
           request.write(jsonEncode(body));
+          final protocol = endpoint.scheme == 'https' ? 'HTTPS' : 'HTTP';
+          recordCommunication(protocol, 'TX', method, payload: {
+            'method': 'POST',
+            'port': endpoint.port,
+            'path': '/exa.language_server_pb.LanguageServerService/$method',
+            'contentType': 'application/json',
+            'connectProtocolVersion': '1',
+            'authHeaderPresent': token != null && token.isNotEmpty,
+            'body': body,
+          });
           final response = await integrationStep(
               'antigravity.http.$method.response', () => request.close(),
               available: (response) => response.statusCode == HttpStatus.ok,
               metrics: (response) => {'statusCode': response.statusCode});
           statusCode = response.statusCode;
-          if (response.statusCode != HttpStatus.ok)
+          if (response.statusCode != HttpStatus.ok) {
+            recordCommunication(protocol, 'RX', method, statusCode: statusCode);
             throw const HttpException('Local quota request failed.');
+          }
           final bytes =
               await integrationStep('antigravity.http.$method.body', () async {
             final bytes = <int>[];
@@ -709,9 +762,22 @@ class QuotaSources {
             return bytes;
           }, metrics: (bytes) => {'bytes': bytes.length});
           return integrationStep('antigravity.http.$method.decode', () async {
-            final decoded = jsonDecode(utf8.decode(bytes));
-            if (decoded is! Map<String, dynamic>) throw const FormatException();
-            return decoded;
+            try {
+              final decoded = jsonDecode(utf8.decode(bytes));
+              if (decoded is! Map<String, dynamic>)
+                throw const FormatException();
+              recordCommunication(protocol, 'RX', method,
+                  statusCode: statusCode,
+                  bytes: bytes.length,
+                  payload: decoded);
+              return decoded;
+            } on FormatException {
+              recordCommunication(protocol, 'RX', method,
+                  statusCode: statusCode,
+                  bytes: bytes.length,
+                  payload: {'parseError': true});
+              rethrow;
+            }
           });
         }, metrics: (_) => {'statusCode': statusCode, 'bytes': responseBytes});
       }
@@ -979,4 +1045,12 @@ Map<String, num> _tokenMetrics(TokenUsage usage) => {
       if (usage.today != null) 'todayTokens': usage.today!.total,
       if (usage.session != null) 'sessionTokens': usage.session!.total,
       if (usage.lifetime != null) 'lifetimeTokens': usage.lifetime!.total,
+    };
+
+String _codexNotificationOperation(Object? method) => switch (method) {
+      'account/rateLimits/updated' => 'account/rateLimits/updated',
+      'thread/tokenUsage/updated' => 'thread/tokenUsage/updated',
+      'account/updated' => 'account/updated',
+      'error' => 'error',
+      _ => 'message',
     };
