@@ -15,6 +15,8 @@ import 'services/preferences.dart';
 import 'settings_dialog.dart';
 import 'about_dialog.dart';
 import 'services/quota_controller.dart';
+import 'services/quota_sources.dart';
+import 'services/claude_desktop.dart';
 import 'hud_overlay.dart';
 import 'usage_summary.dart';
 
@@ -35,6 +37,7 @@ class QuotaApp extends StatefulWidget {
     required this.preferences,
     this.savePreferences,
     this.applyTheme,
+    this.requestClaudeDesktopAccess,
     this.accountConfigurationError,
     this.debugConsole,
   });
@@ -45,6 +48,7 @@ class QuotaApp extends StatefulWidget {
   final OverlayPreferences preferences;
   final Future<void> Function(OverlayPreferences)? savePreferences;
   final Future<void> Function(AppThemeMode)? applyTheme;
+  final Future<bool> Function()? requestClaudeDesktopAccess;
 
   @override
   State<QuotaApp> createState() => _QuotaAppState();
@@ -66,6 +70,7 @@ class _QuotaAppState extends State<QuotaApp> {
         preferences: widget.preferences,
         savePreferences: widget.savePreferences,
         applyTheme: widget.applyTheme,
+        requestClaudeDesktopAccess: widget.requestClaudeDesktopAccess,
         onThemeChanged: (mode) => setState(() => _themeMode = mode),
         accountConfigurationError: widget.accountConfigurationError,
         debugConsole: widget.debugConsole,
@@ -82,6 +87,7 @@ class OverlayPage extends StatefulWidget {
     required this.preferences,
     this.savePreferences,
     this.applyTheme,
+    this.requestClaudeDesktopAccess,
     this.onThemeChanged,
     this.accountConfigurationError,
     this.debugConsole,
@@ -93,6 +99,7 @@ class OverlayPage extends StatefulWidget {
   final OverlayPreferences preferences;
   final Future<void> Function(OverlayPreferences)? savePreferences;
   final Future<void> Function(AppThemeMode)? applyTheme;
+  final Future<bool> Function()? requestClaudeDesktopAccess;
   final ValueChanged<AppThemeMode>? onThemeChanged;
 
   @override
@@ -156,6 +163,22 @@ class _OverlayPageState extends State<OverlayPage> {
     }
   }
 
+  Future<String> _connectClaudeDesktop() async {
+    final connected =
+        await (widget.requestClaudeDesktopAccess?.call() ??
+            QuotaSources.desktopService.requestAccess());
+    if (!connected) return 'Sign in to Claude Desktop before connecting.';
+    await widget.controller.refresh();
+    final snapshot = widget.controller.snapshots['claude'];
+    if (snapshot?.source == 'Claude Desktop' && snapshot!.hasUsage) {
+      return snapshot.status == QuotaStatus.stale
+          ? snapshot.message ?? 'Claude Desktop usage is temporarily stale.'
+          : 'Claude Desktop usage loaded.';
+    }
+    return snapshot?.message ??
+        'Desktop access granted. Usage is currently coming from the Claude Code bridge.';
+  }
+
   Future<void> _openSettings() async {
     if (!mounted || _settingsOpen || applyingPreferences) return;
     setState(() => _settingsOpen = true);
@@ -183,7 +206,8 @@ class _OverlayPageState extends State<OverlayPage> {
         case SettingsSection.connections:
           await showDialog<void>(
             context: context,
-            builder: (_) => const _ConnectionHelp(),
+            builder: (_) =>
+                _ConnectionHelp(onConnectDesktop: _connectClaudeDesktop),
           );
         case SettingsSection.diagnostics:
           await showDialog<void>(
@@ -401,6 +425,7 @@ class _OverlayPageState extends State<OverlayPage> {
                           child: _ResponsiveQuotaContent(
                             controller: widget.controller,
                             compact: preferences.compact,
+                            onConnectDesktop: _connectClaudeDesktop,
                             configurationError:
                                 widget.accountConfigurationError,
                             onManageAccounts: () => showDialog<void>(
@@ -473,12 +498,14 @@ class _ResponsiveQuotaContent extends StatelessWidget {
     required this.controller,
     required this.compact,
     required this.onManageAccounts,
+    this.onConnectDesktop,
     this.configurationError,
   });
 
   final QuotaController controller;
   final bool compact;
   final String? configurationError;
+  final Future<String> Function()? onConnectDesktop;
   final VoidCallback onManageAccounts;
 
   @override
@@ -521,6 +548,7 @@ class _ResponsiveQuotaContent extends StatelessWidget {
                   _EmptyConnections(
                     refreshing: controller.refreshing,
                     onManageAccounts: onManageAccounts,
+                    onConnectDesktop: onConnectDesktop,
                   )
                 else
                   Wrap(
@@ -559,7 +587,9 @@ class _EmptyConnections extends StatelessWidget {
   const _EmptyConnections({
     required this.refreshing,
     required this.onManageAccounts,
+    this.onConnectDesktop,
   });
+  final Future<String> Function()? onConnectDesktop;
   final VoidCallback onManageAccounts;
   final bool refreshing;
 
@@ -596,7 +626,8 @@ class _EmptyConnections extends StatelessWidget {
             FluentButton(
               onPressed: () => showDialog<void>(
                 context: context,
-                builder: (_) => const _ConnectionHelp(),
+                builder: (_) =>
+                    _ConnectionHelp(onConnectDesktop: onConnectDesktop),
               ),
               title: 'Connect providers',
               variant: FluentButtonVariant.subtle,
@@ -868,18 +899,74 @@ String resetLabel(DateTime? resetsAt, DateTime now) {
   return 'Resets in ${duration.inMinutes}m ${duration.inSeconds % 60}s';
 }
 
-class _ConnectionHelp extends StatelessWidget {
-  const _ConnectionHelp();
+class _ConnectionHelp extends StatefulWidget {
+  const _ConnectionHelp({this.onConnectDesktop});
+  final Future<String> Function()? onConnectDesktop;
+
+  @override
+  State<_ConnectionHelp> createState() => _ConnectionHelpState();
+}
+
+class _ConnectionHelpState extends State<_ConnectionHelp> {
+  bool _connecting = false;
+  String? _connectionStatus;
+
+  Future<void> _connect() async {
+    setState(() {
+      _connecting = true;
+      _connectionStatus = null;
+    });
+    try {
+      final String status;
+      if (widget.onConnectDesktop != null) {
+        status = await widget.onConnectDesktop!();
+      } else {
+        final connected = await QuotaSources.desktopService.requestAccess();
+        status = connected
+            ? 'Desktop access granted. Close this dialog and refresh quotas to load usage.'
+            : 'Sign in to Claude Desktop before connecting.';
+      }
+      if (mounted) setState(() => _connectionStatus = status);
+    } on Object catch (error) {
+      if (mounted)
+        setState(
+          () => _connectionStatus = error is ClaudeDesktopException
+              ? error.message
+              : 'Could not connect to Claude Desktop. Sign in and allow Keychain access.',
+        );
+    } finally {
+      if (mounted) setState(() => _connecting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => ResponsiveSettingsSurface(
     title: const Text('Connect providers'),
-    content: const SelectableText(
-      'Codex\nInstall Codex CLI and sign in with your ChatGPT account. Quota reads limits through its app server.\n\n'
-      'Claude\nConnect the included statusline bridge in Claude Code settings. Usage appears after a response. See README for the command.\n\n'
-      'Antigravity\nStart the Antigravity desktop app. Quota detects its local language server. See README for manual endpoint overrides.\n\n'
-      'Sample data is available under Settings > Debug settings. It is kept separate from account data.',
+    content: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SelectableText(
+          'Codex\nInstall Codex CLI and sign in with your ChatGPT account. Quota reads limits through its app server.\n\n'
+          'Claude Desktop (macOS)\nSign in to Claude Desktop, then select Connect Claude Desktop below. Allow access to Claude Safe Storage if macOS requests it. Usage is refreshed at most every five minutes.\n\n'
+          'Claude Code\nThe included statusline bridge remains available for other platforms and separate account profiles. See README for the command.\n\n'
+          'Antigravity\nStart the Antigravity desktop app. Quota detects its local language server. See README for manual endpoint overrides.\n\n'
+          'Sample data is available under Settings > Debug settings. It is kept separate from account data.',
+        ),
+        if (_connectionStatus != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Text(_connectionStatus!),
+          ),
+      ],
     ),
     actions: [
+      if (Theme.of(context).platform == TargetPlatform.macOS)
+        FluentButton(
+          onPressed: _connecting ? null : _connect,
+          title: _connecting ? 'Connecting...' : 'Connect Claude Desktop',
+          variant: FluentButtonVariant.accent,
+        ),
       FluentButton(
         onPressed: () => Navigator.pop(context),
         title: 'Done',

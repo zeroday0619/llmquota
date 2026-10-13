@@ -9,6 +9,7 @@ import '../models/quota_account.dart';
 import '../models/usage.dart';
 import 'app_paths.dart';
 import 'claude_usage.dart';
+import 'claude_desktop.dart';
 
 class QuotaSources {
   QuotaSources({
@@ -16,13 +17,21 @@ class QuotaSources {
     Map<String, String>? environment,
     this.timeout = const Duration(seconds: 12),
     this.claudeSnapshotPath,
+    Future<QuotaSnapshot?> Function()? claudeDesktopFetcher,
   }) : environment = environment ?? Platform.environment,
-       paths = paths ?? AppPaths(environment: environment);
+       paths = paths ?? AppPaths(environment: environment),
+       _claudeDesktopFetcher =
+           claudeDesktopFetcher ??
+           (environment == null && paths == null && claudeSnapshotPath == null
+               ? desktopService.fetch
+               : null);
 
   final AppPaths paths;
   final Map<String, String> environment;
   final Duration timeout;
   final String? claudeSnapshotPath;
+  static final desktopService = ClaudeDesktopService();
+  final Future<QuotaSnapshot?> Function()? _claudeDesktopFetcher;
 
   Future<QuotaSnapshot> fetchAccount(QuotaAccount account) async {
     try {
@@ -147,11 +156,13 @@ class QuotaSources {
     ProviderKind provider,
     String message, {
     QuotaStatus status = QuotaStatus.error,
+    bool discardPreviousData = false,
   }) => QuotaSnapshot(
     provider: provider,
     windows: const [],
     observedAt: DateTime.now(),
     source: 'Local integration',
+    discardPreviousData: discardPreviousData,
     status: status,
     message: message,
   );
@@ -376,6 +387,34 @@ class QuotaSources {
   }
 
   Future<QuotaSnapshot> fetchClaude() async {
+    var desktopFailed = false;
+    ClaudeDesktopException? desktopError;
+    final desktopFetcher = _claudeDesktopFetcher;
+    if (desktopFetcher != null) {
+      try {
+        final snapshot = await desktopFetcher();
+        if (snapshot != null && snapshot.hasUsage) return snapshot;
+      } on Object catch (error) {
+        desktopFailed = true;
+        if (error is ClaudeDesktopException) desktopError = error;
+      }
+    }
+    final bridge = await _fetchClaudeBridge();
+    if (!bridge.hasUsage && desktopFetcher != null) {
+      return _failure(
+        ProviderKind.claude,
+        desktopError?.message ??
+            (desktopFailed
+                ? 'Claude Desktop could not be read. Open Settings > Connect providers, or configure the Claude Code bridge.'
+                : 'Sign in to Claude Desktop and connect it in Settings > Connect providers, or configure the Claude Code bridge.'),
+        discardPreviousData: desktopError?.discardPreviousData ?? false,
+        status: desktopFailed ? QuotaStatus.error : QuotaStatus.unavailable,
+      );
+    }
+    return bridge;
+  }
+
+  Future<QuotaSnapshot> _fetchClaudeBridge() async {
     Future<QuotaSnapshot> withTokens(
       QuotaSnapshot snapshot, [
       Map<String, dynamic>? metadata,

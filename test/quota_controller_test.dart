@@ -29,6 +29,42 @@ QuotaSnapshot measurement(
 );
 
 void main() {
+  test(
+    'account changes discard previous observations instead of retaining stale data',
+    () async {
+      var changed = false;
+      final controller = QuotaController(
+        accounts: [
+          const QuotaAccount(
+            id: 'claude',
+            provider: ProviderKind.claude,
+            label: 'Desktop',
+          ),
+        ],
+        debugMode: true,
+        fetcher: (provider) async => changed
+            ? QuotaSnapshot(
+                provider: provider,
+                windows: [],
+                observedAt: DateTime.now(),
+                source: 'Claude Desktop',
+                status: QuotaStatus.error,
+                discardPreviousData: true,
+                message: 'Account changed.',
+              )
+            : measurement(provider),
+      );
+      addTearDown(controller.dispose);
+      await controller.refresh();
+      expect(controller.snapshots['claude']!.hasUsage, isTrue);
+      changed = true;
+      await controller.refresh();
+      expect(controller.snapshots['claude']!.hasUsage, isFalse);
+      expect(controller.snapshots['claude']!.status, QuotaStatus.error);
+      expect(controller.diagnostics['claude']!.retainedPrevious, isFalse);
+    },
+  );
+
   final work = QuotaAccount(
     id: 'work',
     provider: ProviderKind.codex,

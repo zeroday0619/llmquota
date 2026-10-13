@@ -44,6 +44,7 @@ class QuotaSnapshot {
     this.tokenUsage = const TokenUsage(),
     this.creditBalance,
     this.resetCredits,
+    this.discardPreviousData = false,
   }) : windows = List.unmodifiable(windows),
        observedAt = observedAt.toUtc();
 
@@ -59,6 +60,9 @@ class QuotaSnapshot {
   final TokenUsage tokenUsage;
   final CreditBalance? creditBalance;
   final int? resetCredits;
+
+  /// Prevents stale observations from crossing an authenticated account change.
+  final bool discardPreviousData;
 
   bool get hasUsage =>
       windows.isNotEmpty ||
@@ -79,6 +83,7 @@ class QuotaSnapshot {
     tokenUsage: tokenUsage,
     creditBalance: creditBalance,
     resetCredits: resetCredits,
+    discardPreviousData: discardPreviousData,
   );
 
   QuotaSnapshot withUsage({TokenUsage? tokenUsage}) {
@@ -110,6 +115,7 @@ class QuotaSnapshot {
       tokenUsage: usage,
       creditBalance: creditBalance,
       resetCredits: resetCredits,
+      discardPreviousData: discardPreviousData,
     );
   }
 }

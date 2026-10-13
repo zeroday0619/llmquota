@@ -282,6 +282,7 @@ class QuotaController extends ChangeNotifier {
         final previous = snapshots[account.id];
         final retainedPrevious =
             snapshot.status == QuotaStatus.error &&
+            !snapshot.discardPreviousData &&
             previous != null &&
             previous.hasUsage;
         if (retainedPrevious) {
