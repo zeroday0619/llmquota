@@ -168,6 +168,22 @@ When Codex returns `credits`, the app displays its balance as whole credits, tru
 
 [Desktop packaging](docs/packaging.md) covers macOS DMG/ZIP and Linux DEB, RPM, Arch and AppImage builds for x86_64 and aarch64. GitHub Actions validates pushes and pull requests, then builds and uploads packages with SHA-256 checksums after validation succeeds. Both workflows support manual runs. RISC-V is not supported by the current Flutter desktop engine.
 
+## CodeQL analysis
+
+[CodeQL Analysis](.github/workflows/codeql-analysis.yml) runs on pushes and pull requests to `main`, manual dispatch, and every Tuesday at 02:23 UTC. It uses the `security-extended` query suite and uploads findings to GitHub code scanning. Results use separate categories for each language and desktop target.
+
+| Analysis | Runner | Build |
+| --- | --- | --- |
+| GitHub Actions workflows | Ubuntu | None |
+| Python packaging tools and tests | Ubuntu | None |
+| Linux C/C++ runner and compiled plugins | Ubuntu | Flutter Linux release |
+| Windows C/C++ runner and compiled plugins | Windows | Flutter Windows release |
+| macOS Swift runner and compiled plugins | macOS 15 Intel | Flutter macOS release |
+
+Native analyses use Flutter 3.47.6 and trace a fresh release build after CodeQL initialization. The Swift job uses an Intel runner to avoid the Rosetta requirement for compiled analysis on Apple Silicon. Only code compiled by each native build is extracted; prebuilt Flutter engine binaries and unbuilt test targets are outside that analysis.
+
+CodeQL does not support Dart. The existing desktop validation workflow continues to run `flutter analyze` and `flutter test` for the Flutter application; these checks do not provide CodeQL coverage. See [CodeQL language support](https://codeql.github.com/docs/codeql-overview/supported-languages-and-frameworks/), [compiled-language configuration](https://docs.github.com/en/code-security/reference/code-scanning/codeql/build-options-for-compiled-languages), and [system requirements](https://codeql.github.com/docs/codeql-overview/system-requirements/).
+
 ## Sources
 
 - [Codex App Server protocol](https://learn.chatgpt.com/docs/app-server)
