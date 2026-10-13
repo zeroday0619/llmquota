@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llmqueta/app.dart';
@@ -15,11 +17,12 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(340, 260));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     const privateLabel = 'private@example.com';
-    const privatePath = '/private/account/configuration';
+    final privatePath =
+        '${Directory.systemTemp.path}${Platform.pathSeparator}private-account';
     const privateMessage = 'secret-token in provider response';
     final controller = QuotaController(
       debugMode: true,
-      accounts: const [
+      accounts: [
         QuotaAccount(
           id: 'codex',
           provider: ProviderKind.codex,

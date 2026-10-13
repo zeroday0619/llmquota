@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llmqueta/models/integration_diagnostic.dart';
@@ -71,17 +72,20 @@ void main() {
       'integration diagnostics isolate concurrent accounts and unavailable stages',
       () async {
     final accounts = [
-      const QuotaAccount(
+      QuotaAccount(
           id: 'first',
           provider: ProviderKind.codex,
           label: 'First',
-          configurationDirectory: '/fixture/first'),
-      const QuotaAccount(
+          configurationDirectory:
+              '${Directory.systemTemp.path}${Platform.pathSeparator}first'),
+      QuotaAccount(
           id: 'second',
           provider: ProviderKind.claude,
           label: 'Second',
-          configurationDirectory: '/fixture/second',
-          snapshotPath: '/fixture/second/quota.json'),
+          configurationDirectory:
+              '${Directory.systemTemp.path}${Platform.pathSeparator}second',
+          snapshotPath:
+              '${Directory.systemTemp.path}${Platform.pathSeparator}second${Platform.pathSeparator}quota.json'),
     ];
     final controller = QuotaController(
       debugMode: true,
