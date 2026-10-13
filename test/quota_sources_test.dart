@@ -15,67 +15,85 @@ void main() {
     );
     expect(candidates.take(2), ['/first/codex', '/second/codex']);
     expect(
-        candidates,
-        containsAll(
-            ['/Users/test/.local/bin/codex', '/opt/homebrew/bin/codex']));
+      candidates,
+      containsAll(['/Users/test/.local/bin/codex', '/opt/homebrew/bin/codex']),
+    );
     expect(
-        codexExecutableCandidates(
-          environment: {
-            'LLMQUETA_CODEX_EXECUTABLE': '/explicit/codex',
-            'PATH': '/other'
-          },
-          operatingSystem: 'linux',
-        ),
-        ['/explicit/codex']);
+      codexExecutableCandidates(
+        environment: {
+          'LLMQUETA_CODEX_EXECUTABLE': '/explicit/codex',
+          'PATH': '/other',
+        },
+        operatingSystem: 'linux',
+      ),
+      ['/explicit/codex'],
+    );
     expect(
-        codexExecutableCandidates(
-          environment: {'LLMQUETA_CODEX_EXECUTABLE': '', 'PATH': '/other'},
-        ),
-        isEmpty);
+      codexExecutableCandidates(
+        environment: {'LLMQUETA_CODEX_EXECUTABLE': '', 'PATH': '/other'},
+      ),
+      isEmpty,
+    );
   });
 
-  test('Windows Codex resolution accepts native executables, not shell shims',
-      () {
-    final candidates = codexExecutableCandidates(
-      environment: {
-        'PATH': r'C:\first;C:\second',
-        'USERPROFILE': r'C:\Users\test'
-      },
-      operatingSystem: 'windows',
-    );
-    expect(candidates.take(2), [r'C:\first/codex.exe', r'C:\second/codex.exe']);
-    for (final shim in ['codex.cmd', 'codex.bat', 'codex.ps1']) {
-      expect(
+  test(
+    'Windows Codex resolution accepts native executables, not shell shims',
+    () {
+      final candidates = codexExecutableCandidates(
+        environment: {
+          'PATH': r'C:\first;C:\second',
+          'USERPROFILE': r'C:\Users\test',
+        },
+        operatingSystem: 'windows',
+      );
+      expect(candidates.take(2), [
+        r'C:\first/codex.exe',
+        r'C:\second/codex.exe',
+      ]);
+      for (final shim in ['codex.cmd', 'codex.bat', 'codex.ps1']) {
+        expect(
           codexExecutableCandidates(
             environment: {'LLMQUETA_CODEX_EXECUTABLE': shim},
             operatingSystem: 'windows',
           ),
-          isEmpty);
-    }
-  });
+          isEmpty,
+        );
+      }
+    },
+  );
 
-  test('Codex resolver rejects a missing explicit override without fallback',
-      () async {
-    final temporary =
-        await Directory.systemTemp.createTemp('llmquota-resolver-');
-    addTearDown(() => temporary.delete(recursive: true));
-    final executable = File('${temporary.path}/codex');
-    await executable.writeAsString('#!/bin/sh\nexit 0\n');
-    if (!Platform.isWindows) {
-      expect((await Process.run('chmod', ['+x', executable.path])).exitCode, 0);
-    }
-    expect(
-        await resolveCodexExecutable(environment: {
-          'LLMQUETA_CODEX_EXECUTABLE': '${temporary.path}/missing',
-          'PATH': temporary.path,
-        }),
-        isNull);
-    expect(
-        await resolveCodexExecutable(environment: {
-          'LLMQUETA_CODEX_EXECUTABLE': executable.path,
-        }),
-        executable.path);
-  });
+  test(
+    'Codex resolver rejects a missing explicit override without fallback',
+    () async {
+      final temporary = await Directory.systemTemp.createTemp(
+        'llmquota-resolver-',
+      );
+      addTearDown(() => temporary.delete(recursive: true));
+      final executable = File('${temporary.path}/codex');
+      await executable.writeAsString('#!/bin/sh\nexit 0\n');
+      if (!Platform.isWindows) {
+        expect(
+          (await Process.run('chmod', ['+x', executable.path])).exitCode,
+          0,
+        );
+      }
+      expect(
+        await resolveCodexExecutable(
+          environment: {
+            'LLMQUETA_CODEX_EXECUTABLE': '${temporary.path}/missing',
+            'PATH': temporary.path,
+          },
+        ),
+        isNull,
+      );
+      expect(
+        await resolveCodexExecutable(
+          environment: {'LLMQUETA_CODEX_EXECUTABLE': executable.path},
+        ),
+        executable.path,
+      );
+    },
+  );
 
   test('configuration paths follow platform conventions', () {
     expect(
@@ -126,22 +144,27 @@ void main() {
   test('Claude local tokens remain available without a quota bridge', () async {
     final temporary = await Directory.systemTemp.createTemp('llmquota-claude-');
     addTearDown(() => temporary.delete(recursive: true));
-    final transcript =
-        File('${temporary.path}/.claude/projects/test/session.jsonl');
+    final transcript = File(
+      '${temporary.path}/.claude/projects/test/session.jsonl',
+    );
     await transcript.parent.create(recursive: true);
-    await transcript.writeAsString('${jsonEncode({
-          'type': 'assistant',
-          'sessionId': 'test-session',
-          'timestamp': DateTime.now().toUtc().toIso8601String(),
-          'message': {
-            'id': 'message-test',
-            'usage': {'input_tokens': 120, 'output_tokens': 30},
-          },
-        })}\n');
+    await transcript.writeAsString(
+      '${jsonEncode({
+        'type': 'assistant',
+        'sessionId': 'test-session',
+        'timestamp': DateTime.now().toUtc().toIso8601String(),
+        'message': {
+          'id': 'message-test',
+          'usage': {'input_tokens': 120, 'output_tokens': 30},
+        },
+      })}\n',
+    );
     final snapshot = await QuotaSources(
       environment: {'HOME': temporary.path},
       paths: AppPaths(
-          environment: {'HOME': temporary.path}, operatingSystem: 'macos'),
+        environment: {'HOME': temporary.path},
+        operatingSystem: 'macos',
+      ),
     ).fetchClaude();
     expect(snapshot.status, QuotaStatus.live);
     expect(snapshot.windows, isEmpty);
@@ -165,15 +188,16 @@ void main() {
       final file = paths.claudeSnapshotFile;
       await file.parent.create(recursive: true);
       final observed = DateTime.now().toUtc().subtract(
-            const Duration(minutes: 20),
-          );
+        const Duration(minutes: 20),
+      );
       await file.writeAsString(
         jsonEncode({
           'observed_at': observed.toIso8601String(),
           'rate_limits': {
             'five_hour': {
               'used_percentage': 42,
-              'resets_at': DateTime.now()
+              'resets_at':
+                  DateTime.now()
                       .add(const Duration(hours: 1))
                       .millisecondsSinceEpoch ~/
                   1000,
@@ -199,7 +223,7 @@ void main() {
       containsAll([
         '/first/claude',
         '/Users/test/.local/bin/claude',
-        '/opt/homebrew/bin/claude'
+        '/opt/homebrew/bin/claude',
       ]),
     );
     expect(
@@ -211,67 +235,88 @@ void main() {
     );
   });
 
-  test('Claude account metadata enriches quota without replacing observations',
-      () async {
-    final temporary =
-        await Directory.systemTemp.createTemp('llmquota-claude-plan-');
-    addTearDown(() => temporary.delete(recursive: true));
-    final paths = AppPaths(
-        environment: {'HOME': temporary.path}, operatingSystem: 'macos');
-    final executable = File('${temporary.path}/claude');
-    final sources = QuotaSources(
+  test(
+    'Claude account metadata enriches quota without replacing observations',
+    () async {
+      final temporary = await Directory.systemTemp.createTemp(
+        'llmquota-claude-plan-',
+      );
+      addTearDown(() => temporary.delete(recursive: true));
+      final paths = AppPaths(
+        environment: {'HOME': temporary.path},
+        operatingSystem: 'macos',
+      );
+      final executable = File('${temporary.path}/claude');
+      final sources = QuotaSources(
         paths: paths,
-        environment: {'LLMQUETA_CLAUDE_EXECUTABLE': executable.path});
-    await paths.claudeSnapshotFile.parent.create(recursive: true);
-    final observed =
-        DateTime.now().toUtc().subtract(const Duration(minutes: 20));
-    await paths.claudeSnapshotFile.writeAsString(jsonEncode({
-      'observed_at': observed.toIso8601String(),
-      'rate_limits': {
-        'five_hour': {
-          'used_percentage': 42,
-          'resets_at': DateTime.now()
-                  .add(const Duration(hours: 1))
-                  .millisecondsSinceEpoch ~/
-              1000
-        }
-      },
-    }));
-    Future<QuotaSnapshot> fetchWith(Map<String, Object?> response,
-        {int exitCode = 0}) async {
-      await executable.writeAsString(
-          '''#!/bin/sh\n[ "\$1 \$2 \$3" = "auth status --json" ] || exit 2\nprintf '%s\\n' '${jsonEncode(response)}'\nexit $exitCode\n''');
-      expect((await Process.run('chmod', ['+x', executable.path])).exitCode, 0);
-      return sources.fetchClaude();
-    }
+        environment: {'LLMQUETA_CLAUDE_EXECUTABLE': executable.path},
+      );
+      await paths.claudeSnapshotFile.parent.create(recursive: true);
+      final observed = DateTime.now().toUtc().subtract(
+        const Duration(minutes: 20),
+      );
+      await paths.claudeSnapshotFile.writeAsString(
+        jsonEncode({
+          'observed_at': observed.toIso8601String(),
+          'rate_limits': {
+            'five_hour': {
+              'used_percentage': 42,
+              'resets_at':
+                  DateTime.now()
+                      .add(const Duration(hours: 1))
+                      .millisecondsSinceEpoch ~/
+                  1000,
+            },
+          },
+        }),
+      );
+      Future<QuotaSnapshot> fetchWith(
+        Map<String, Object?> response, {
+        int exitCode = 0,
+      }) async {
+        await executable.writeAsString(
+          '''#!/bin/sh\n[ "\$1 \$2 \$3" = "auth status --json" ] || exit 2\nprintf '%s\\n' '${jsonEncode(response)}'\nexit $exitCode\n''',
+        );
+        expect(
+          (await Process.run('chmod', ['+x', executable.path])).exitCode,
+          0,
+        );
+        return sources.fetchClaude();
+      }
 
-    var snapshot = await fetchWith({
-      'loggedIn': true,
-      'authMethod': 'claude.ai',
-      'subscriptionType': 'max'
-    });
-    expect(snapshot.planName, 'Max');
-    expect(snapshot.status, QuotaStatus.stale);
-    expect(snapshot.observedAt, observed);
-    expect(snapshot.windows.single.usedPercent, 42);
-    for (final response in [
-      {'loggedIn': false, 'authMethod': 'claude.ai', 'subscriptionType': 'max'},
-      {'loggedIn': true, 'authMethod': 'api_key', 'subscriptionType': 'max'},
-      {'loggedIn': true, 'authMethod': 'claude.ai'},
-      {'loggedIn': true, 'authMethod': 'claude.ai', 'subscriptionType': 123},
-    ]) {
-      snapshot = await fetchWith(response);
+      var snapshot = await fetchWith({
+        'loggedIn': true,
+        'authMethod': 'claude.ai',
+        'subscriptionType': 'max',
+      });
+      expect(snapshot.planName, 'Max');
+      expect(snapshot.status, QuotaStatus.stale);
+      expect(snapshot.observedAt, observed);
+      expect(snapshot.windows.single.usedPercent, 42);
+      for (final response in [
+        {
+          'loggedIn': false,
+          'authMethod': 'claude.ai',
+          'subscriptionType': 'max',
+        },
+        {'loggedIn': true, 'authMethod': 'api_key', 'subscriptionType': 'max'},
+        {'loggedIn': true, 'authMethod': 'claude.ai'},
+        {'loggedIn': true, 'authMethod': 'claude.ai', 'subscriptionType': 123},
+      ]) {
+        snapshot = await fetchWith(response);
+        expect(snapshot.planName, isNull);
+        expect(snapshot.windows.single.usedPercent, 42);
+      }
+      snapshot = await fetchWith({}, exitCode: 1);
+      expect(snapshot.planName, isNull);
+      expect(snapshot.status, QuotaStatus.stale);
+      await executable.delete();
+      snapshot = await sources.fetchClaude();
       expect(snapshot.planName, isNull);
       expect(snapshot.windows.single.usedPercent, 42);
-    }
-    snapshot = await fetchWith({}, exitCode: 1);
-    expect(snapshot.planName, isNull);
-    expect(snapshot.status, QuotaStatus.stale);
-    await executable.delete();
-    snapshot = await sources.fetchClaude();
-    expect(snapshot.planName, isNull);
-    expect(snapshot.windows.single.usedPercent, 42);
-  }, skip: Platform.isWindows);
+    },
+    skip: Platform.isWindows,
+  );
 
   test('Antigravity rejects remote hosts before sending credentials', () async {
     final sources = QuotaSources(
@@ -387,59 +432,69 @@ void main() {
   });
 
   for (final enrichment in ['success', 'error', 'timeout']) {
-    test('Antigravity preserves measured quota when plan lookup is $enrichment',
-        () async {
-      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      addTearDown(() => server.close(force: true));
-      final methods = <String>[];
-      server.listen((request) async {
-        methods.add(request.uri.path.split('/').last);
-        await request.drain<void>();
-        request.response.headers.contentType = ContentType.json;
-        if (methods.last == 'RetrieveUserQuotaSummary') {
-          request.response.write(jsonEncode({
-            'groups': [
-              {
-                'buckets': [
+    test(
+      'Antigravity preserves measured quota when plan lookup is $enrichment',
+      () async {
+        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        addTearDown(() => server.close(force: true));
+        final methods = <String>[];
+        server.listen((request) async {
+          methods.add(request.uri.path.split('/').last);
+          await request.drain<void>();
+          request.response.headers.contentType = ContentType.json;
+          if (methods.last == 'RetrieveUserQuotaSummary') {
+            request.response.write(
+              jsonEncode({
+                'groups': [
                   {
-                    'bucketId': 'weekly',
-                    'remaining': {
-                      'remainingFraction': 0.7,
-                      'resetTime': '2030-01-01T00:00:00Z'
-                    }
-                  }
-                ]
-              }
-            ]
-          }));
-        } else if (enrichment == 'success') {
-          request.response.write(jsonEncode({
-            'userStatus': {
-              'planStatus': {
-                'planInfo': {'planName': 'Google AI Pro'}
-              }
-            }
-          }));
-        } else if (enrichment == 'error') {
-          request.response.statusCode = 503;
-        } else {
-          return;
-        }
-        await request.response.close();
-      });
-      final stopwatch = Stopwatch()..start();
-      final snapshot = await QuotaSources(environment: {
-        'LLMQUETA_ANTIGRAVITY_URL': 'http://127.0.0.1:${server.port}'
-      }, timeout: const Duration(milliseconds: 500))
-          .fetchAntigravity();
-      expect(snapshot.status, QuotaStatus.live);
-      expect(snapshot.windows.single.id, 'weekly');
-      expect(snapshot.windows.single.usedPercent, closeTo(30, 0.001));
-      expect(snapshot.planName,
-          enrichment == 'success' ? 'Google AI Pro' : isNull);
-      expect(methods, ['RetrieveUserQuotaSummary', 'GetUserStatus']);
-      expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
-    });
+                    'buckets': [
+                      {
+                        'bucketId': 'weekly',
+                        'remaining': {
+                          'remainingFraction': 0.7,
+                          'resetTime': '2030-01-01T00:00:00Z',
+                        },
+                      },
+                    ],
+                  },
+                ],
+              }),
+            );
+          } else if (enrichment == 'success') {
+            request.response.write(
+              jsonEncode({
+                'userStatus': {
+                  'planStatus': {
+                    'planInfo': {'planName': 'Google AI Pro'},
+                  },
+                },
+              }),
+            );
+          } else if (enrichment == 'error') {
+            request.response.statusCode = 503;
+          } else {
+            return;
+          }
+          await request.response.close();
+        });
+        final stopwatch = Stopwatch()..start();
+        final snapshot = await QuotaSources(
+          environment: {
+            'LLMQUETA_ANTIGRAVITY_URL': 'http://127.0.0.1:${server.port}',
+          },
+          timeout: const Duration(milliseconds: 500),
+        ).fetchAntigravity();
+        expect(snapshot.status, QuotaStatus.live);
+        expect(snapshot.windows.single.id, 'weekly');
+        expect(snapshot.windows.single.usedPercent, closeTo(30, 0.001));
+        expect(
+          snapshot.planName,
+          enrichment == 'success' ? 'Google AI Pro' : isNull,
+        );
+        expect(methods, ['RetrieveUserQuotaSummary', 'GetUserStatus']);
+        expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
+      },
+    );
   }
 
   test('Antigravity does not follow HTTP redirects', () async {
@@ -546,15 +601,16 @@ while :; do :; done
         'initialize',
         'initialized',
         'account/rateLimits/read',
-        'account/usage/read'
+        'account/usage/read',
       ],
     );
     expect(await stopped.exists(), isTrue);
   }, skip: Platform.isWindows);
   for (final behavior in ['error', 'timeout', 'session', 'quota-error']) {
     test('Codex optional usage preserves quota for $behavior', () async {
-      final temporary =
-          await Directory.systemTemp.createTemp('llmquota-usage-');
+      final temporary = await Directory.systemTemp.createTemp(
+        'llmquota-usage-',
+      );
       addTearDown(() => temporary.delete(recursive: true));
       final executable = File('${temporary.path}/mock-codex');
       final log = File('${temporary.path}/requests');

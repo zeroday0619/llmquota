@@ -7,13 +7,14 @@ final Object communicationDiagnosticSinkKey = Object();
 typedef CommunicationDiagnosticSink = void Function(CommunicationDiagnostic);
 
 class CommunicationDiagnostic {
-  const CommunicationDiagnostic(
-      {required this.protocol,
-      required this.direction,
-      required this.operation,
-      required this.detail,
-      this.bytes,
-      this.statusCode});
+  const CommunicationDiagnostic({
+    required this.protocol,
+    required this.direction,
+    required this.operation,
+    required this.detail,
+    this.bytes,
+    this.statusCode,
+  });
   final String protocol;
   final String direction;
   final String operation;
@@ -23,11 +24,12 @@ class CommunicationDiagnostic {
 }
 
 class DebugLogEntry {
-  const DebugLogEntry(
-      {required this.elapsed,
-      required this.provider,
-      required this.accountNumber,
-      required this.message});
+  const DebugLogEntry({
+    required this.elapsed,
+    required this.provider,
+    required this.accountNumber,
+    required this.message,
+  });
   final Duration elapsed;
   final ProviderKind provider;
   final int accountNumber;
@@ -36,17 +38,26 @@ class DebugLogEntry {
       '[${(elapsed.inMicroseconds / 1000000).toStringAsFixed(6).padLeft(11)}] ${provider.name}/account-$accountNumber $message';
 }
 
-void recordCommunication(String protocol, String direction, String operation,
-    {Object? payload, int? bytes, int? statusCode}) {
+void recordCommunication(
+  String protocol,
+  String direction,
+  String operation, {
+  Object? payload,
+  int? bytes,
+  int? statusCode,
+}) {
   final sink = Zone.current[communicationDiagnosticSinkKey];
   if (sink is! CommunicationDiagnosticSink) return;
-  sink(CommunicationDiagnostic(
+  sink(
+    CommunicationDiagnostic(
       protocol: _identifier(protocol),
       direction: _identifier(direction),
       operation: _identifier(operation),
       detail: sanitizeCommunicationPayload(payload),
       bytes: bytes,
-      statusCode: statusCode));
+      statusCode: statusCode,
+    ),
+  );
 }
 
 String _identifier(String value) =>
@@ -172,7 +183,7 @@ const _sensitive = <String>{
   'secret',
   'accesstoken',
   'refreshtoken',
-  'csrftoken'
+  'csrftoken',
 };
 
 String sanitizeCommunicationPayload(Object? payload) {
@@ -193,8 +204,9 @@ String sanitizeCommunicationPayload(Object? payload) {
         final normalized = key.toLowerCase().replaceAll(RegExp('[^a-z]'), '');
         if (normalized == 'path' &&
             entry.value is String &&
-            RegExp(r'^/exa\.language_server_pb\.LanguageServerService/(RetrieveUserQuotaSummary|GetUserStatus)$')
-                .hasMatch(entry.value as String)) {
+            RegExp(
+              r'^/exa\.language_server_pb\.LanguageServerService/(RetrieveUserQuotaSummary|GetUserStatus)$',
+            ).hasMatch(entry.value as String)) {
           output['path'] = entry.value;
           included++;
           continue;
@@ -216,7 +228,7 @@ String sanitizeCommunicationPayload(Object? payload) {
     if (value is List)
       return [
         for (final item in value.take(20)) sanitize(item, field, depth + 1),
-        if (value.length > 20) '[TRUNCATED]'
+        if (value.length > 20) '[TRUNCATED]',
       ];
     if (value is String) {
       if (field == 'method' &&
@@ -232,26 +244,34 @@ String sanitizeCommunicationPayload(Object? payload) {
             'account/updated',
             'error',
             'RetrieveUserQuotaSummary',
-            'GetUserStatus'
-          }.contains(value)) return value;
+            'GetUserStatus',
+          }.contains(value))
+        return value;
       if ({'args', 'arguments'}.contains(field) &&
-          {'auth', 'status', '--json'}.contains(value)) return value;
+          {'auth', 'status', '--json'}.contains(value))
+        return value;
       if (field == 'contentType' &&
-          {'application/json', 'application/json; charset=utf-8'}
-              .contains(value)) return value;
+          {
+            'application/json',
+            'application/json; charset=utf-8',
+          }.contains(value))
+        return value;
       if (field == 'connectProtocolVersion' && value == '1') return value;
       if (field == 'jsonrpc' && value == '2.0') return value;
       if ({'version', 'ideVersion'}.contains(field) &&
-          RegExp(r'^\d{1,4}\.\d{1,4}\.\d{1,4}$').hasMatch(value)) return value;
+          RegExp(r'^\d{1,4}\.\d{1,4}\.\d{1,4}$').hasMatch(value))
+        return value;
       if ({'startDate', 'resetTime', 'resets_at'}.contains(field) &&
-          RegExp(r'^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2}))?$')
-              .hasMatch(value)) return value;
+          RegExp(
+            r'^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2}))?$',
+          ).hasMatch(value))
+        return value;
       if ({
             'planType',
             'planName',
             'plan_type',
             'subscriptionType',
-            'subscription_type'
+            'subscription_type',
           }.contains(field) &&
           {
             'free',
@@ -269,8 +289,9 @@ String sanitizeCommunicationPayload(Object? payload) {
             'Business',
             'Enterprise',
             'Education',
-            'Max'
-          }.contains(value)) return value;
+            'Max',
+          }.contains(value))
+        return value;
       if (field == 'balance' &&
           value.length <= 80 &&
           RegExp(r'^\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$').hasMatch(value))

@@ -1,13 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:gbt_fluent2_ui/gbt_fluent2_ui.dart';
+import 'package:gbt_fluent2_ui/fluent_icons.dart';
+import 'fluent_controls.dart';
 import 'package:flutter/services.dart';
 
 import 'models/quota.dart';
+import 'app_theme.dart';
 import 'account_dialog.dart';
 import 'debug_dialog.dart';
 import 'services/debug_console.dart';
 import 'services/preferences.dart';
+import 'settings_dialog.dart';
+import 'about_dialog.dart';
 import 'services/quota_controller.dart';
 import 'hud_overlay.dart';
 import 'usage_summary.dart';
@@ -21,13 +27,14 @@ abstract class OverlayWindow {
   Future<void> close();
 }
 
-class QuotaApp extends StatelessWidget {
+class QuotaApp extends StatefulWidget {
   const QuotaApp({
     super.key,
     required this.controller,
     required this.window,
     required this.preferences,
     this.savePreferences,
+    this.applyTheme,
     this.accountConfigurationError,
     this.debugConsole,
   });
@@ -37,32 +44,34 @@ class QuotaApp extends StatelessWidget {
   final OverlayWindow window;
   final OverlayPreferences preferences;
   final Future<void> Function(OverlayPreferences)? savePreferences;
+  final Future<void> Function(AppThemeMode)? applyTheme;
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-        title: 'LLM Quota',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          brightness: Brightness.dark,
-          useMaterial3: true,
-          scaffoldBackgroundColor: const Color(0xff11151c),
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xffa6e6ce),
-            brightness: Brightness.dark,
-          ),
-          tooltipTheme: const TooltipThemeData(
-            waitDuration: Duration(milliseconds: 400),
-          ),
-        ),
-        home: OverlayPage(
-          controller: controller,
-          window: window,
-          preferences: preferences,
-          savePreferences: savePreferences,
-          accountConfigurationError: accountConfigurationError,
-          debugConsole: debugConsole,
-        ),
-      );
+  State<QuotaApp> createState() => _QuotaAppState();
+}
+
+class _QuotaAppState extends State<QuotaApp> {
+  late AppThemeMode _themeMode = widget.preferences.themeMode;
+
+  @override
+  Widget build(BuildContext context) => FluentProvider(
+    child: MaterialApp(
+      title: 'LLM Quota',
+      themeAnimationDuration: Duration.zero,
+      debugShowCheckedModeBanner: false,
+      theme: applicationTheme(_themeMode),
+      home: OverlayPage(
+        controller: widget.controller,
+        window: widget.window,
+        preferences: widget.preferences,
+        savePreferences: widget.savePreferences,
+        applyTheme: widget.applyTheme,
+        onThemeChanged: (mode) => setState(() => _themeMode = mode),
+        accountConfigurationError: widget.accountConfigurationError,
+        debugConsole: widget.debugConsole,
+      ),
+    ),
+  );
 }
 
 class OverlayPage extends StatefulWidget {
@@ -72,6 +81,8 @@ class OverlayPage extends StatefulWidget {
     required this.window,
     required this.preferences,
     this.savePreferences,
+    this.applyTheme,
+    this.onThemeChanged,
     this.accountConfigurationError,
     this.debugConsole,
   });
@@ -81,6 +92,8 @@ class OverlayPage extends StatefulWidget {
   final OverlayWindow window;
   final OverlayPreferences preferences;
   final Future<void> Function(OverlayPreferences)? savePreferences;
+  final Future<void> Function(AppThemeMode)? applyTheme;
+  final ValueChanged<AppThemeMode>? onThemeChanged;
 
   @override
   State<OverlayPage> createState() => _OverlayPageState();
@@ -91,6 +104,7 @@ class _OverlayPageState extends State<OverlayPage> {
   late final Timer ticker;
   bool applyingPreferences = false;
   bool _observedDebugMode = false;
+  bool _settingsOpen = false;
   DialogRoute<void>? _debugRoute;
 
   void _synchronizeDebugConsole() {
@@ -131,17 +145,69 @@ class _OverlayPageState extends State<OverlayPage> {
       }
     } on Object {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content:
-              Text('Could not open the debug console. Retry from settings.'),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not open the debug console. Retry from settings.',
+            ),
+          ),
+        );
       }
+    }
+  }
+
+  Future<void> _openSettings() async {
+    if (!mounted || _settingsOpen || applyingPreferences) return;
+    setState(() => _settingsOpen = true);
+    try {
+      final section = await showDialog<SettingsSection>(
+        context: context,
+        builder: (_) => const SettingsDialog(),
+      );
+      if (!mounted || section == null) return;
+      switch (section) {
+        case SettingsSection.display:
+          final next = await showDialog<OverlayPreferences>(
+            context: context,
+            builder: (_) => DisplaySettingsDialog(preferences: preferences),
+          );
+          if (mounted && next != null) await update(next);
+        case SettingsSection.accounts:
+          await showDialog<void>(
+            context: context,
+            builder: (_) => AccountManagerDialog(
+              controller: widget.controller,
+              configurationError: widget.accountConfigurationError,
+            ),
+          );
+        case SettingsSection.connections:
+          await showDialog<void>(
+            context: context,
+            builder: (_) => const _ConnectionHelp(),
+          );
+        case SettingsSection.diagnostics:
+          await showDialog<void>(
+            context: context,
+            builder: (_) => DiagnosticsSettingsDialog(
+              controller: widget.controller,
+              onOpenConsole: () => unawaited(_showDebugConsole()),
+            ),
+          );
+        case SettingsSection.about:
+          await showDialog<void>(
+            context: context,
+            builder: (_) => const ApplicationInfoDialog(),
+          );
+      }
+    } finally {
+      if (mounted) setState(() => _settingsOpen = false);
     }
   }
 
   @override
   void initState() {
     super.initState();
+    setDebugConsoleTheme(widget.debugConsole, preferences.themeMode);
     widget.controller.addListener(_synchronizeDebugConsole);
     _synchronizeDebugConsole();
     ticker = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -166,16 +232,23 @@ class _OverlayPageState extends State<OverlayPage> {
       await widget.window.setAlwaysOnTop(next.alwaysOnTop);
       await widget.window.setOpacity(next.opacity);
       await widget.window.setCompact(next.compact);
+      await widget.applyTheme?.call(next.themeMode);
       applied = true;
-      if (mounted) setState(() => preferences = next);
+      if (mounted) {
+        setState(() => preferences = next);
+        widget.onThemeChanged?.call(next.themeMode);
+        setDebugConsoleTheme(widget.debugConsole, next.themeMode);
+      }
       await (widget.savePreferences?.call(next) ?? next.save());
     } on Object {
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(applied
-                ? 'Window settings applied, but could not be saved.'
-                : 'Could not apply window settings.'),
+            content: Text(
+              applied
+                  ? 'Window settings applied, but could not be saved.'
+                  : 'Could not apply window settings.',
+            ),
           ),
         );
     } finally {
@@ -191,22 +264,26 @@ class _OverlayPageState extends State<OverlayPage> {
                 unawaited(update(preferences.copyWith(hud: false))),
           },
           child: Focus(
-              autofocus: true,
-              child: Scaffold(
-                body: HudOverlay(
-                  controller: widget.controller,
-                  resetLabel: resetLabel,
-                  onDrag: widget.window.startDragging,
-                  onClose: widget.window.close,
-                  onExit: applyingPreferences
-                      ? null
-                      : () =>
-                          unawaited(update(preferences.copyWith(hud: false))),
-                ),
-              )),
+            autofocus: true,
+            child: FluentScaffold(
+              body: HudOverlay(
+                controller: widget.controller,
+                resetLabel: resetLabel,
+                onDrag: widget.window.startDragging,
+                onClose: widget.window.close,
+                onExit: applyingPreferences
+                    ? null
+                    : () => unawaited(update(preferences.copyWith(hud: false))),
+              ),
+            ),
+          ),
         )
       : Shortcuts(
           shortcuts: const {
+            SingleActivator(LogicalKeyboardKey.comma, control: true):
+                _SettingsIntent(),
+            SingleActivator(LogicalKeyboardKey.comma, meta: true):
+                _SettingsIntent(),
             SingleActivator(LogicalKeyboardKey.keyR, control: true):
                 _RefreshIntent(),
             SingleActivator(LogicalKeyboardKey.keyR, meta: true):
@@ -214,6 +291,12 @@ class _OverlayPageState extends State<OverlayPage> {
           },
           child: Actions(
             actions: {
+              _SettingsIntent: CallbackAction<_SettingsIntent>(
+                onInvoke: (_) {
+                  unawaited(_openSettings());
+                  return null;
+                },
+              ),
               _RefreshIntent: CallbackAction<_RefreshIntent>(
                 onInvoke: (_) {
                   unawaited(widget.controller.refresh());
@@ -223,14 +306,14 @@ class _OverlayPageState extends State<OverlayPage> {
             },
             child: Focus(
               autofocus: true,
-              child: Scaffold(
+              child: FluentScaffold(
                 body: SafeArea(
                   child: AnimatedBuilder(
                     animation: widget.controller,
                     builder: (context, _) => Column(
                       children: [
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(18, 8, 6, 0),
+                          padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
                           child: Row(
                             children: [
                               Expanded(
@@ -238,206 +321,100 @@ class _OverlayPageState extends State<OverlayPage> {
                                   behavior: HitTestBehavior.opaque,
                                   onPanStart: (_) =>
                                       unawaited(widget.window.startDragging()),
-                                  child: const Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 12),
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.blur_on_rounded,
-                                          size: 22,
-                                          color: Color(0xffa6e6ce),
-                                        ),
-                                        SizedBox(width: 8),
-                                        Text(
-                                          'QUOTA',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w700,
-                                            letterSpacing: 1.8,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                  child: FluentText(
+                                    'LLM Quota',
+                                    maxLines: 1,
+                                    textOverflow: TextOverflow.ellipsis,
+                                    style: FluentThemeDataModel.of(
+                                      context,
+                                    ).fluentTextTheme?.title2,
                                   ),
                                 ),
                               ),
-                              IconButton(
+                              FluentActionButton(
                                 tooltip: preferences.alwaysOnTop
                                     ? 'Unpin overlay'
                                     : 'Keep on top',
                                 icon: Icon(
                                   preferences.alwaysOnTop
-                                      ? Icons.push_pin
-                                      : Icons.push_pin_outlined,
-                                  size: 17,
+                                      ? FluentIcons.pin_20_filled
+                                      : FluentIcons.pin_20_regular,
+                                  size: 20,
                                 ),
                                 onPressed: applyingPreferences
                                     ? null
                                     : () => update(
-                                          preferences.copyWith(
-                                            alwaysOnTop:
-                                                !preferences.alwaysOnTop,
-                                          ),
+                                        preferences.copyWith(
+                                          alwaysOnTop: !preferences.alwaysOnTop,
                                         ),
+                                      ),
                               ),
-                              PopupMenuButton<String>(
-                                enabled: !applyingPreferences,
+                              FluentActionButton(
                                 tooltip: 'Overlay settings',
-                                icon: const Icon(Icons.tune, size: 18),
-                                onSelected: (value) {
-                                  switch (value) {
-                                    case 'hud':
-                                      unawaited(update(
-                                          preferences.copyWith(hud: true)));
-                                    case 'compact':
-                                      unawaited(
-                                        update(
-                                          preferences.copyWith(
-                                            compact: !preferences.compact,
-                                          ),
-                                        ),
-                                      );
-                                    case 'debug':
-                                      widget.controller.setDebugMode(
-                                          !widget.controller.debugMode);
-                                    case 'diagnostics':
-                                      unawaited(_showDebugConsole());
-                                    case 'demo':
-                                      widget.controller.setDemo(
-                                        !widget.controller.demo,
-                                      );
-                                    case 'opacity':
-                                      unawaited(
-                                        update(
-                                          preferences.copyWith(
-                                            opacity: preferences.opacity == 1
-                                                ? 0.75
-                                                : 1,
-                                          ),
-                                        ),
-                                      );
-                                    case 'accounts':
-                                      showDialog<void>(
-                                          context: context,
-                                          builder: (_) => AccountManagerDialog(
-                                              controller: widget.controller,
-                                              configurationError: widget
-                                                  .accountConfigurationError));
-                                    case 'help':
-                                      showDialog<void>(
-                                        context: context,
-                                        builder: (_) => const _ConnectionHelp(),
-                                      );
-                                  }
-                                },
-                                itemBuilder: (_) => [
-                                  const PopupMenuItem(
-                                    value: 'hud',
-                                    child: Text('HUD mode'),
-                                  ),
-                                  CheckedPopupMenuItem(
-                                    value: 'compact',
-                                    checked: preferences.compact,
-                                    child: const Text('Compact view'),
-                                  ),
-                                  CheckedPopupMenuItem(
-                                    value: 'opacity',
-                                    checked: preferences.opacity < 1,
-                                    child: const Text('75% opacity'),
-                                  ),
-                                  CheckedPopupMenuItem(
-                                    value: 'demo',
-                                    checked: widget.controller.demo,
-                                    child: const Text('Demo data'),
-                                  ),
-                                  CheckedPopupMenuItem(
-                                    value: 'debug',
-                                    checked: widget.controller.debugMode,
-                                    child: const Text('Debug mode'),
-                                  ),
-                                  if (widget.controller.debugMode)
-                                    const PopupMenuItem(
-                                      value: 'diagnostics',
-                                      child: Text('Debug diagnostics'),
-                                    ),
-                                  const PopupMenuItem(
-                                      value: 'accounts',
-                                      child: Text('Manage accounts')),
-                                  const PopupMenuItem(
-                                    value: 'help',
-                                    child: Text('Connect providers'),
-                                  ),
-                                ],
+                                icon: const Icon(
+                                  FluentIcons.settings_20_regular,
+                                  size: 20,
+                                ),
+                                onPressed: applyingPreferences || _settingsOpen
+                                    ? null
+                                    : () => unawaited(_openSettings()),
                               ),
                               if (Theme.of(context).platform !=
                                   TargetPlatform.macOS)
-                                IconButton(
+                                FluentActionButton(
                                   tooltip: 'Close',
-                                  icon: const Icon(Icons.close, size: 18),
+                                  icon: const Icon(
+                                    FluentIcons.dismiss_20_regular,
+                                    size: 20,
+                                  ),
                                   onPressed: widget.window.close,
                                 ),
                             ],
                           ),
                         ),
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
-                          child: Row(
-                            children: [
-                              Text(
-                                widget.controller.debugMode
-                                    ? (widget.controller.demo
-                                        ? 'DEBUG · DEMO DATA'
-                                        : 'DEBUG MODE')
-                                    : widget.controller.demo
-                                        ? 'DEMO · SAMPLE DATA'
-                                        : 'CONNECTED ACCOUNTS',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  letterSpacing: 1.3,
-                                  color: widget.controller.demo
-                                      ? Colors.amber
-                                      : const Color(0xff8c98a9),
-                                ),
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              widget.controller.debugMode
+                                  ? (widget.controller.demo
+                                        ? 'Debug · demo data'
+                                        : 'Debug mode')
+                                  : widget.controller.demo
+                                  ? 'Demo · sample data'
+                                  : 'Connected accounts',
+                              style: TextStyle(
+                                fontSize: Theme.of(
+                                  context,
+                                ).textTheme.bodySmall!.fontSize,
+                                color: widget.controller.demo
+                                    ? warningColor(context)
+                                    : Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
                               ),
-                            ],
+                            ),
                           ),
                         ),
-                        if (widget.accountConfigurationError != null)
-                          Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 18, vertical: 8),
-                              child: Text(widget.accountConfigurationError!,
-                                  style: TextStyle(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .error))),
                         Expanded(
-                          child: widget.controller.visibleSnapshots.isEmpty
-                              ? _EmptyConnections(
-                                  refreshing: widget.controller.refreshing,
-                                  onManageAccounts: () => showDialog<void>(
-                                      context: context,
-                                      builder: (_) => AccountManagerDialog(
-                                          controller: widget.controller,
-                                          configurationError: widget
-                                              .accountConfigurationError)))
-                              : ListView(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 14),
-                                  children: [
-                                    for (final snapshot
-                                        in widget.controller.visibleSnapshots)
-                                      _ProviderCard(
-                                        provider: snapshot.provider,
-                                        snapshot: snapshot,
-                                        compact: preferences.compact,
-                                        now: DateTime.now(),
-                                      ),
-                                  ],
-                                ),
+                          child: _ResponsiveQuotaContent(
+                            controller: widget.controller,
+                            compact: preferences.compact,
+                            configurationError:
+                                widget.accountConfigurationError,
+                            onManageAccounts: () => showDialog<void>(
+                              context: context,
+                              builder: (_) => AccountManagerDialog(
+                                controller: widget.controller,
+                                configurationError:
+                                    widget.accountConfigurationError,
+                              ),
+                            ),
+                          ),
                         ),
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(18, 3, 8, 5),
+                          padding: const EdgeInsets.fromLTRB(16, 4, 12, 4),
                           child: Row(
                             children: [
                               Container(
@@ -445,29 +422,38 @@ class _OverlayPageState extends State<OverlayPage> {
                                 height: 5,
                                 decoration: BoxDecoration(
                                   color: widget.controller.demo
-                                      ? Colors.amber
-                                      : const Color(0xff8c98a9),
+                                      ? warningColor(context)
+                                      : Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
                                   shape: BoxShape.circle,
                                 ),
                               ),
-                              const SizedBox(width: 7),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   widget.controller.refreshing
                                       ? 'Refreshing…'
                                       : 'Auto-refresh · 60s',
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Color(0xff8c98a9),
+                                  style: TextStyle(
+                                    fontSize: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall!.fontSize,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                               ),
-                              IconButton(
+                              FluentActionButton(
                                 tooltip: 'Refresh now (Ctrl/Cmd+R)',
                                 onPressed: widget.controller.refreshing
                                     ? null
                                     : widget.controller.refresh,
-                                icon: const Icon(Icons.refresh, size: 17),
+                                icon: const Icon(
+                                  FluentIcons.arrow_sync_20_regular,
+                                  size: 17,
+                                ),
                               ),
                             ],
                           ),
@@ -482,43 +468,149 @@ class _OverlayPageState extends State<OverlayPage> {
         );
 }
 
+class _ResponsiveQuotaContent extends StatelessWidget {
+  const _ResponsiveQuotaContent({
+    required this.controller,
+    required this.compact,
+    required this.onManageAccounts,
+    this.configurationError,
+  });
+
+  final QuotaController controller;
+  final bool compact;
+  final String? configurationError;
+  final VoidCallback onManageAccounts;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final snapshots = controller.visibleSnapshots;
+      final padding = ((constraints.maxWidth * 0.025 / 4).round() * 4.0).clamp(
+        12.0,
+        24.0,
+      );
+      final contentWidth = (constraints.maxWidth - padding * 2).clamp(
+        0.0,
+        1440.0,
+      );
+      final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+      final minimumCardWidth = 320 * textScale.clamp(1.0, 1.5);
+      final columns = ((contentWidth + 12) / (minimumCardWidth + 12))
+          .floor()
+          .clamp(1, 4);
+      final cardWidth = (contentWidth - 12 * (columns - 1)) / columns;
+      return SingleChildScrollView(
+        padding: EdgeInsets.symmetric(horizontal: padding, vertical: 4),
+        child: Center(
+          child: SizedBox(
+            width: contentWidth,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (configurationError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      configurationError!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                if (snapshots.isEmpty)
+                  _EmptyConnections(
+                    refreshing: controller.refreshing,
+                    onManageAccounts: onManageAccounts,
+                  )
+                else
+                  Wrap(
+                    spacing: 12,
+                    children: [
+                      for (final snapshot in snapshots)
+                        SizedBox(
+                          width: cardWidth,
+                          child: _ProviderCard(
+                            provider: snapshot.provider,
+                            snapshot: snapshot,
+                            compact: compact,
+                            now: DateTime.now(),
+                          ),
+                        ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _SettingsIntent extends Intent {
+  const _SettingsIntent();
+}
+
 class _RefreshIntent extends Intent {
   const _RefreshIntent();
 }
 
 class _EmptyConnections extends StatelessWidget {
-  const _EmptyConnections(
-      {required this.refreshing, required this.onManageAccounts});
+  const _EmptyConnections({
+    required this.refreshing,
+    required this.onManageAccounts,
+  });
   final VoidCallback onManageAccounts;
   final bool refreshing;
 
   @override
   Widget build(BuildContext context) => Center(
-          child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(refreshing ? Icons.sync : Icons.link_off,
-              size: 28, color: const Color(0xff8c98a9)),
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            refreshing
+                ? FluentIcons.arrow_sync_20_regular
+                : FluentIcons.link_dismiss_20_regular,
+            size: 28,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(height: 12),
-          Text(refreshing ? 'Checking connections…' : 'No connected platforms',
-              style:
-                  const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+          Text(
+            refreshing ? 'Checking connections…' : 'No connected platforms',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           if (!refreshing) ...[
             const SizedBox(height: 8),
-            const Text('Connected accounts appear here automatically.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: Color(0xff8c98a9))),
+            Text(
+              'Connected accounts appear here automatically.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
             const SizedBox(height: 12),
-            TextButton(
-                onPressed: () => showDialog<void>(
-                    context: context, builder: (_) => const _ConnectionHelp()),
-                child: const Text('Connect providers')),
-            TextButton(
-                onPressed: onManageAccounts,
-                child: const Text('Manage accounts')),
+            FluentButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => const _ConnectionHelp(),
+              ),
+              title: 'Connect providers',
+              variant: FluentButtonVariant.subtle,
+            ),
+            FluentButton(
+              onPressed: onManageAccounts,
+              title: 'Manage accounts',
+              variant: FluentButtonVariant.subtle,
+            ),
           ],
-        ]),
-      ));
+        ],
+      ),
+    ),
+  );
 }
 
 class _ProviderCard extends StatelessWidget {
@@ -535,35 +627,28 @@ class _ProviderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = [
-      const Color(0xffa6e6ce),
-      const Color(0xffe7b397),
-      const Color(0xff9abaff),
-    ][provider.index];
+    final color = providerAccent(context, provider.index);
     final title = ['Codex', 'Claude', 'Antigravity'][provider.index];
     final status = snapshot?.status;
     final age = snapshot == null
         ? Duration.zero
         : now.toUtc().difference(snapshot!.observedAt);
-    final stale = status == QuotaStatus.stale ||
+    final stale =
+        status == QuotaStatus.stale ||
         (status == QuotaStatus.live && age.inMinutes >= 10);
     final badge = stale
-        ? 'STALE'
+        ? 'Stale'
         : switch (status) {
-            QuotaStatus.live => 'CONNECTED',
-            QuotaStatus.demo => 'DEMO',
-            QuotaStatus.error => 'ERROR',
-            QuotaStatus.unavailable => 'NOT CONNECTED',
-            _ => 'LOADING',
+            QuotaStatus.live => 'Connected',
+            QuotaStatus.demo => 'Demo',
+            QuotaStatus.error => 'Error',
+            QuotaStatus.unavailable => 'Not connected',
+            _ => 'Loading',
           };
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+    final card = FluentCardContainer(
+      color: Theme.of(context).colorScheme.surfaceContainer,
+      cornerRadius: FluentCornerRadius.large,
       padding: EdgeInsets.all(compact ? 12 : 16),
-      decoration: BoxDecoration(
-        color: const Color(0xff1a202a),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xff2b3442)),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -577,63 +662,73 @@ class _ProviderCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              const SizedBox(width: 9),
+              const SizedBox(width: 8),
               Expanded(
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    if (snapshot?.planName != null) ...[
-                      const SizedBox(width: 7),
-                      Flexible(
-                        child: Tooltip(
-                          message: snapshot!.planName!,
-                          child: Text(
-                            snapshot!.planName!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Color(0xff8c98a9),
-                            ),
+                    if (snapshot?.planName != null)
+                      Tooltip(
+                        message: snapshot!.planName!,
+                        child: Text(
+                          snapshot!.planName!,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: Theme.of(
+                              context,
+                            ).textTheme.bodySmall!.fontSize,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 7),
-                    ],
                   ],
                 ),
               ),
-              Text(
-                badge,
-                style: TextStyle(
-                  fontSize: 8,
-                  letterSpacing: 0.6,
-                  color: stale || status == QuotaStatus.error
-                      ? Colors.amber
-                      : const Color(0xff8c98a9),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  badge,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: Theme.of(context).textTheme.bodySmall!.fontSize,
+                    color: stale || status == QuotaStatus.error
+                        ? warningColor(context)
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ],
           ),
           if (snapshot?.accountLabel != null)
             Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Tooltip(
-                    message: snapshot!.accountLabel!,
-                    child: Text(snapshot!.accountLabel!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 11, color: Color(0xffb7c1d0))))),
+              padding: const EdgeInsets.only(top: 8),
+              child: Tooltip(
+                message: snapshot!.accountLabel!,
+                child: Text(
+                  snapshot!.accountLabel!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: Theme.of(context).textTheme.bodyMedium!.fontSize,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
           if (snapshot == null)
             const Padding(
-              padding: EdgeInsets.only(top: 14),
+              padding: EdgeInsets.only(top: 16),
               child: LinearProgressIndicator(minHeight: 2),
             ),
           if (snapshot != null && !snapshot!.hasUsage)
@@ -641,16 +736,16 @@ class _ProviderCard extends StatelessWidget {
               padding: const EdgeInsets.only(top: 12),
               child: Text(
                 snapshot!.message ?? 'No quota data available.',
-                style: const TextStyle(
-                  fontSize: 11,
-                  height: 1.5,
-                  color: Color(0xffa5afbf),
+                style: TextStyle(
+                  fontSize: Theme.of(context).textTheme.bodyMedium!.fontSize,
+                  height: Theme.of(context).textTheme.bodyMedium!.height,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
             ),
           for (final window in snapshot?.windows ?? <QuotaWindow>[])
             Padding(
-              padding: EdgeInsets.only(top: compact ? 9 : 16),
+              padding: EdgeInsets.only(top: compact ? 8 : 16),
               child: Column(
                 children: [
                   Row(
@@ -658,28 +753,37 @@ class _ProviderCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           window.label,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Color(0xffb7c1d0),
+                          style: TextStyle(
+                            fontSize: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium!.fontSize,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ),
-                      Text(
-                        window.remainingPercent == null
-                            ? 'Unknown'
-                            : '${window.remainingPercent!.toStringAsFixed(0)}% left',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: window.remainingPercent != null &&
-                                  window.remainingPercent! < 15
-                              ? Colors.amber
-                              : color,
+                      Flexible(
+                        child: Text(
+                          window.remainingPercent == null
+                              ? 'Unknown'
+                              : '${window.remainingPercent!.toStringAsFixed(0)}% left',
+                          style: TextStyle(
+                            fontSize: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium!.fontSize,
+                            fontWeight: FontWeight.w600,
+                            color:
+                                window.remainingPercent != null &&
+                                    window.remainingPercent! < 15
+                                ? warningColor(context)
+                                : color,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 7),
+                  const SizedBox(height: 8),
                   if (window.remainingPercent != null)
                     Semantics(
                       label:
@@ -687,12 +791,14 @@ class _ProviderCard extends StatelessWidget {
                       child: LinearProgressIndicator(
                         value: window.remainingPercent! / 100,
                         color: color,
-                        backgroundColor: const Color(0xff303947),
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(4),
                         minHeight: 4,
                       ),
                     ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Tooltip(
                     message: window.resetsAt == null
                         ? 'The provider did not report a reset time.'
@@ -701,9 +807,11 @@ class _ProviderCard extends StatelessWidget {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         resetLabel(window.resetsAt, now),
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Color(0xff8c98a9),
+                        style: TextStyle(
+                          fontSize: Theme.of(
+                            context,
+                          ).textTheme.bodySmall!.fontSize,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -717,7 +825,10 @@ class _ProviderCard extends StatelessWidget {
               padding: const EdgeInsets.only(top: 12),
               child: Text(
                 '${snapshot!.source} · ${age.isNegative || age.inSeconds < 60 ? 'just now' : '${age.inMinutes}m ago'}${stale ? ' · refresh needed' : ''}',
-                style: const TextStyle(fontSize: 9, color: Color(0xff7c889a)),
+                style: TextStyle(
+                  fontSize: Theme.of(context).textTheme.bodySmall!.fontSize,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           if (snapshot?.message != null && snapshot!.hasUsage)
@@ -725,11 +836,23 @@ class _ProviderCard extends StatelessWidget {
               padding: const EdgeInsets.only(top: 8),
               child: Text(
                 snapshot!.message!,
-                style: const TextStyle(fontSize: 10, color: Colors.amber),
+                style: TextStyle(
+                  fontSize: Theme.of(context).textTheme.bodySmall!.fontSize,
+                  color: warningColor(context),
+                ),
               ),
             ),
         ],
       ),
+    );
+    return FluentContainer(
+      margin: const EdgeInsets.only(bottom: 12),
+      cornerRadius: FluentCornerRadius.large,
+      strokeStyle: FluentStrokeStyle(
+        color: Theme.of(context).colorScheme.outlineVariant,
+        thickness: FluentStrokeThickness.strokeWidth10,
+      ),
+      child: card,
     );
   }
 }
@@ -748,21 +871,20 @@ String resetLabel(DateTime? resetsAt, DateTime now) {
 class _ConnectionHelp extends StatelessWidget {
   const _ConnectionHelp();
   @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Connect providers'),
-        content: const SingleChildScrollView(
-          child: SelectableText(
-            'Codex\nInstall Codex CLI and sign in with your ChatGPT account. Quota reads limits through its app server.\n\n'
-            'Claude\nConnect the included statusline bridge in Claude Code settings. Usage appears after a response. See README for the command.\n\n'
-            'Antigravity\nStart the Antigravity desktop app. Quota detects its local language server. See README for manual endpoint overrides.\n\n'
-            'Demo data is available in the settings menu. It is never mixed with account data.',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Done'),
-          ),
-        ],
-      );
+  Widget build(BuildContext context) => ResponsiveSettingsSurface(
+    title: const Text('Connect providers'),
+    content: const SelectableText(
+      'Codex\nInstall Codex CLI and sign in with your ChatGPT account. Quota reads limits through its app server.\n\n'
+      'Claude\nConnect the included statusline bridge in Claude Code settings. Usage appears after a response. See README for the command.\n\n'
+      'Antigravity\nStart the Antigravity desktop app. Quota detects its local language server. See README for manual endpoint overrides.\n\n'
+      'Sample data is available under Settings > Debug settings. It is kept separate from account data.',
+    ),
+    actions: [
+      FluentButton(
+        onPressed: () => Navigator.pop(context),
+        title: 'Done',
+        variant: FluentButtonVariant.subtle,
+      ),
+    ],
+  );
 }

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gbt_fluent2_ui/gbt_fluent2_ui.dart';
 import 'package:llmquota/account_dialog.dart';
 import 'package:llmquota/app.dart';
 import 'package:llmquota/models/quota.dart';
@@ -25,50 +26,61 @@ class AccountTestWindow implements OverlayWindow {
 }
 
 final personal = QuotaAccount(
-    id: 'personal',
-    provider: ProviderKind.codex,
-    label: 'Personal',
-    configurationDirectory:
-        '${Directory.systemTemp.absolute.path}/profiles/personal');
+  id: 'personal',
+  provider: ProviderKind.codex,
+  label: 'Personal',
+  configurationDirectory:
+      '${Directory.systemTemp.absolute.path}/profiles/personal',
+);
 final work = QuotaAccount(
-    id: 'work',
-    provider: ProviderKind.codex,
-    label: 'Work subscription with a very long account label',
-    configurationDirectory:
-        '${Directory.systemTemp.absolute.path}/profiles/work');
+  id: 'work',
+  provider: ProviderKind.codex,
+  label: 'Work subscription with a very long account label',
+  configurationDirectory: '${Directory.systemTemp.absolute.path}/profiles/work',
+);
 
 void main() {
-  Future<void> mount(WidgetTester tester, QuotaController controller,
-      {bool hud = false}) async {
+  Future<void> mount(
+    WidgetTester tester,
+    QuotaController controller, {
+    bool hud = false,
+  }) async {
     await tester.binding.setSurfaceSize(Size(hud ? 280 : 340, 720));
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox.shrink());
       controller.dispose();
       await tester.binding.setSurfaceSize(null);
     });
-    await tester.pumpWidget(QuotaApp(
+    await tester.pumpWidget(
+      QuotaApp(
         controller: controller,
         window: AccountTestWindow(),
-        preferences: OverlayPreferences(hud: hud)));
+        preferences: OverlayPreferences(hud: hud),
+      ),
+    );
     await tester.pump();
   }
 
   for (final hud in [false, true]) {
-    testWidgets('same-provider accounts remain distinct with hud=$hud',
-        (tester) async {
+    testWidgets('same-provider accounts remain distinct with hud=$hud', (
+      tester,
+    ) async {
       final controller = QuotaController(
-          accounts: [personal, work],
-          accountFetcher: (account) async => QuotaSnapshot(
-              provider: account.provider,
-              windows: [
-                QuotaWindow(
-                    id: 'primary',
-                    label: '5 hours',
-                    usedPercent: account.id == 'personal' ? 20 : 70)
-              ],
-              observedAt: DateTime.now(),
-              source: 'Fixture',
-              status: QuotaStatus.live));
+        accounts: [personal, work],
+        accountFetcher: (account) async => QuotaSnapshot(
+          provider: account.provider,
+          windows: [
+            QuotaWindow(
+              id: 'primary',
+              label: '5 hours',
+              usedPercent: account.id == 'personal' ? 20 : 70,
+            ),
+          ],
+          observedAt: DateTime.now(),
+          source: 'Fixture',
+          status: QuotaStatus.live,
+        ),
+      );
       await controller.refresh();
       await mount(tester, controller, hud: hud);
       expect(find.text('Codex'), findsNWidgets(2));
@@ -76,37 +88,45 @@ void main() {
       expect(find.text(work.label), findsOneWidget);
       expect(find.text('80% left'), findsOneWidget);
       expect(find.text('30% left'), findsOneWidget);
-      expect(tester.widget<Text>(find.text(work.label)).overflow,
-          TextOverflow.ellipsis);
+      expect(
+        tester.widget<Text>(find.text(work.label)).overflow,
+        TextOverflow.ellipsis,
+      );
       expect(find.byTooltip(work.label), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
 
-  testWidgets('account manager adds edits and removes a scoped profile',
-      (tester) async {
+  testWidgets('account manager adds edits and removes a scoped profile', (
+    tester,
+  ) async {
     final saved = <List<QuotaAccount>>[];
     final controller = QuotaController(
-        accounts: [],
-        saveAccounts: (accounts) async {
-          saved.add(accounts);
-        },
-        accountFetcher: (account) async => QuotaSnapshot(
-            provider: account.provider,
-            windows: [],
-            observedAt: DateTime.now(),
-            source: 'Fixture',
-            status: QuotaStatus.unavailable));
+      accounts: [],
+      saveAccounts: (accounts) async {
+        saved.add(accounts);
+      },
+      accountFetcher: (account) async => QuotaSnapshot(
+        provider: account.provider,
+        windows: [],
+        observedAt: DateTime.now(),
+        source: 'Fixture',
+        status: QuotaStatus.unavailable,
+      ),
+    );
     await mount(tester, controller);
     await tester.tap(find.text('Manage accounts'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add account'));
     await tester.pumpAndSettle();
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Account label'), 'Personal');
+      find.widgetWithText(FluentTextField, 'Account label'),
+      'Personal',
+    );
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Codex home directory'),
-        '${Directory.systemTemp.absolute.path}/profiles/personal');
+      find.widgetWithText(FluentTextField, 'Codex home directory'),
+      '${Directory.systemTemp.absolute.path}/profiles/personal',
+    );
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
     expect(controller.accounts.single.label, 'Personal');
@@ -115,7 +135,9 @@ void main() {
     await tester.tap(find.byTooltip('Edit Personal'));
     await tester.pumpAndSettle();
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Account label'), 'Work');
+      find.widgetWithText(FluentTextField, 'Account label'),
+      'Work',
+    );
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
     expect(controller.accounts.single.id, id);
@@ -127,11 +149,13 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('failed persistence preserves account and reports failure',
-      (tester) async {
+  testWidgets('failed persistence preserves account and reports failure', (
+    tester,
+  ) async {
     final controller = QuotaController(
-        accounts: [personal],
-        saveAccounts: (_) async => throw StateError('fixture save failure'));
+      accounts: [personal],
+      saveAccounts: (_) async => throw StateError('fixture save failure'),
+    );
     await mount(tester, controller);
     await tester.tap(find.text('Manage accounts'));
     await tester.pumpAndSettle();
@@ -142,31 +166,41 @@ void main() {
     expect(find.byType(AccountManagerDialog), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
-  testWidgets('defaults can be restored after removing every account',
-      (tester) async {
+  testWidgets('defaults can be restored after removing every account', (
+    tester,
+  ) async {
     final controller = QuotaController(
-        accounts: [],
-        saveAccounts: (_) async {},
-        accountFetcher: (account) async => QuotaSnapshot(
-            provider: account.provider,
-            windows: [],
-            observedAt: DateTime.now(),
-            source: 'Fixture',
-            status: QuotaStatus.unavailable));
+      accounts: [],
+      saveAccounts: (_) async {},
+      accountFetcher: (account) async => QuotaSnapshot(
+        provider: account.provider,
+        windows: [],
+        observedAt: DateTime.now(),
+        source: 'Fixture',
+        status: QuotaStatus.unavailable,
+      ),
+    );
     await mount(tester, controller);
     await tester.tap(find.text('Manage accounts'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Restore default connections'));
     await tester.pumpAndSettle();
-    expect(controller.accounts.map((account) => account.id),
-        ['codex', 'claude', 'antigravity']);
+    expect(controller.accounts.map((account) => account.id), [
+      'codex',
+      'claude',
+      'antigravity',
+    ]);
     expect(find.text('Restore default connections'), findsNothing);
     await tester.tap(find.byTooltip('Edit Default').first);
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(TextFormField, 'Codex home directory'),
-        findsNothing);
+    expect(
+      find.widgetWithText(FluentTextField, 'Codex home directory'),
+      findsNothing,
+    );
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Account label'), 'Local Codex');
+      find.widgetWithText(FluentTextField, 'Account label'),
+      'Local Codex',
+    );
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
     expect(controller.accounts.first.configurationDirectory, isNull);
@@ -175,20 +209,26 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('invalid labels keep the editor open with an actionable error',
-      (tester) async {
-    final controller =
-        QuotaController(accounts: [], saveAccounts: (_) async {});
+  testWidgets('invalid labels keep the editor open with an actionable error', (
+    tester,
+  ) async {
+    final controller = QuotaController(
+      accounts: [],
+      saveAccounts: (_) async {},
+    );
     await mount(tester, controller);
     await tester.tap(find.text('Manage accounts'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add account'));
     await tester.pumpAndSettle();
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Account label'), 'a' * 81);
+      find.widgetWithText(FluentTextField, 'Account label'),
+      'a' * 81,
+    );
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Codex home directory'),
-        '${Directory.systemTemp.absolute.path}/profiles/personal');
+      find.widgetWithText(FluentTextField, 'Codex home directory'),
+      '${Directory.systemTemp.absolute.path}/profiles/personal',
+    );
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
     expect(controller.accounts, isEmpty);

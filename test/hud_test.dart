@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llmquota/app_theme.dart';
 import 'package:llmquota/hud_overlay.dart';
 import 'package:llmquota/app.dart';
 import 'package:llmquota/main.dart' show overlayHeight;
@@ -29,81 +30,99 @@ class HudTestWindow implements OverlayWindow {
 }
 
 void main() {
-  testWidgets('HUD menu and Escape switch modes and persist the choice',
-      (tester) async {
-    final controller = QuotaController()..setDemo(true);
-    final window = HudTestWindow();
-    final saved = <bool>[];
-    await tester.pumpWidget(QuotaApp(
-        controller: controller,
-        window: window,
-        preferences: const OverlayPreferences(),
-        savePreferences: (value) async {
-          saved.add(value.hud);
-        }));
-    await tester.pump();
-    await tester.tap(find.byTooltip('Overlay settings'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('HUD mode'));
-    await tester.pumpAndSettle();
-    expect(find.byType(HudOverlay), findsOneWidget);
-    expect(saved, [true]);
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
-    expect(find.byType(HudOverlay), findsNothing);
-    expect(find.byTooltip('Overlay settings'), findsOneWidget);
-    expect(window.modes, [true, false]);
-    expect(saved, [true, false]);
-    await tester.pumpWidget(const SizedBox.shrink());
-    controller.dispose();
-  });
   testWidgets(
-      'HUD fits a narrow panel and keeps return and close controls accessible',
-      (tester) async {
-    final controller = QuotaController();
-    controller.snapshots[ProviderKind.codex.name] = QuotaSnapshot(
-      provider: ProviderKind.codex,
-      windows: [
-        QuotaWindow(
+    'display settings and Escape switch modes and persist the choice',
+    (tester) async {
+      final controller = QuotaController()..setDemo(true);
+      final window = HudTestWindow();
+      final saved = <bool>[];
+      await tester.pumpWidget(
+        QuotaApp(
+          controller: controller,
+          window: window,
+          preferences: const OverlayPreferences(),
+          savePreferences: (value) async {
+            saved.add(value.hud);
+          },
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.byTooltip('Overlay settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Display settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('HUD mode'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+      expect(find.byType(HudOverlay), findsOneWidget);
+      expect(saved, [true]);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byType(HudOverlay), findsNothing);
+      expect(find.byTooltip('Overlay settings'), findsOneWidget);
+      expect(window.modes, [true, false]);
+      expect(saved, [true, false]);
+      await tester.pumpWidget(const SizedBox.shrink());
+      controller.dispose();
+    },
+  );
+  testWidgets(
+    'HUD fits a narrow panel and keeps return and close controls accessible',
+    (tester) async {
+      final controller = QuotaController();
+      controller.snapshots[ProviderKind.codex.name] = QuotaSnapshot(
+        provider: ProviderKind.codex,
+        windows: [
+          QuotaWindow(
             id: 'primary',
             label: '5 hours',
             usedPercent: 20,
-            resetsAt: DateTime.now().add(const Duration(hours: 1)))
-      ],
-      observedAt: DateTime.now(),
-      source: 'Fixture',
-      status: QuotaStatus.live,
-    );
-    await tester.binding
-        .setSurfaceSize(Size(280, overlayHeight(controller, false, hud: true)));
-    var returned = false;
-    var closed = false;
-    await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
+            resetsAt: DateTime.now().add(const Duration(hours: 1)),
+          ),
+        ],
+        observedAt: DateTime.now(),
+        source: 'Fixture',
+        status: QuotaStatus.live,
+      );
+      await tester.binding.setSurfaceSize(
+        Size(280, overlayHeight(controller, false, hud: true)),
+      );
+      var returned = false;
+      var closed = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: applicationTheme(AppThemeMode.dark),
+          home: Scaffold(
             body: HudOverlay(
-      controller: controller,
-      resetLabel: resetLabel,
-      onDrag: () async {},
-      onExit: () => returned = true,
-      onClose: () async {
-        closed = true;
-      },
-    ))));
-    expect(find.text('Codex'), findsOneWidget);
-    expect(find.text('Claude'), findsNothing);
-    expect(find.text('80% left'), findsOneWidget);
-    await tester.tap(find.byTooltip('Return to window (Esc)'));
-    await tester.tap(find.byTooltip('Close'));
-    expect(returned, isTrue);
-    expect(closed, isTrue);
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-    controller.dispose();
-    await tester.binding.setSurfaceSize(null);
-  });
+              controller: controller,
+              resetLabel: resetLabel,
+              onDrag: () async {},
+              onExit: () => returned = true,
+              onClose: () async {
+                closed = true;
+              },
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Codex'), findsOneWidget);
+      expect(find.text('Claude'), findsNothing);
+      expect(find.text('80% left'), findsOneWidget);
+      await tester.tap(find.byTooltip('Return to window (Esc)'));
+      await tester.tap(find.byTooltip('Close'));
+      expect(returned, isTrue);
+      expect(closed, isTrue);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      controller.dispose();
+      await tester.binding.setSurfaceSize(null);
+    },
+  );
 
-  testWidgets('HUD plan labels fit beside provider names at narrow width',
-      (tester) async {
+  testWidgets('HUD plan labels fit beside provider names at narrow width', (
+    tester,
+  ) async {
     const planName = 'Enterprise subscription with an unusually long plan name';
     final controller = QuotaController();
     controller.snapshots[ProviderKind.antigravity.name] = QuotaSnapshot(
@@ -120,19 +139,22 @@ void main() {
       controller.dispose();
       await tester.binding.setSurfaceSize(null);
     });
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: HudOverlay(
-          controller: controller,
-          resetLabel: resetLabel,
-          onDrag: () async {},
-          onExit: () {},
-          onClose: () async {},
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: applicationTheme(AppThemeMode.dark),
+        home: Scaffold(
+          body: HudOverlay(
+            controller: controller,
+            resetLabel: resetLabel,
+            onDrag: () async {},
+            onExit: () {},
+            onClose: () async {},
+          ),
         ),
       ),
-    ));
+    );
     expect(find.text('Antigravity'), findsOneWidget);
-    expect(find.text('STALE'), findsOneWidget);
+    expect(find.text('Stale'), findsOneWidget);
     expect(find.text(planName), findsOneWidget);
     expect(find.byTooltip(planName), findsOneWidget);
     final label = tester.widget<Text>(find.text(planName));
@@ -141,8 +163,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('HUD scrolls token scopes and distinguishes unlimited credits',
-      (tester) async {
+  testWidgets('HUD scrolls token scopes and distinguishes unlimited credits', (
+    tester,
+  ) async {
     final controller = QuotaController();
     controller.snapshots[ProviderKind.codex.name] = QuotaSnapshot(
       provider: ProviderKind.codex,
@@ -159,19 +182,24 @@ void main() {
       controller.dispose();
       await tester.binding.setSurfaceSize(null);
     });
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: applicationTheme(AppThemeMode.dark),
         home: Scaffold(
-            body: HudOverlay(
-      controller: controller,
-      resetLabel: resetLabel,
-      onDrag: () async {},
-      onExit: () {},
-      onClose: () async {},
-    ))));
-    expect(find.text('Today tokens'), findsOneWidget);
-    expect(find.text('Session tokens'), findsOneWidget);
+          body: HudOverlay(
+            controller: controller,
+            resetLabel: resetLabel,
+            onDrag: () async {},
+            onExit: () {},
+            onClose: () async {},
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Today tokens'), findsNothing);
+    expect(find.text('Session tokens'), findsNothing);
     expect(find.text('Lifetime tokens'), findsOneWidget);
-    expect(find.text('Unavailable'), findsNWidgets(2));
+    expect(find.text('Unavailable'), findsNothing);
     expect(find.text('1B'), findsOneWidget);
     await tester.drag(find.byType(ListView), const Offset(0, -160));
     await tester.pump();
@@ -179,28 +207,34 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('HUD marks old observations and preserves unknown quota',
-      (tester) async {
+  testWidgets('HUD marks old observations and preserves unknown quota', (
+    tester,
+  ) async {
     final controller = QuotaController();
     controller.snapshots[ProviderKind.claude.name] = QuotaSnapshot(
       provider: ProviderKind.claude,
       windows: [
-        QuotaWindow(id: 'primary', label: '5 hours', usedPercent: null)
+        QuotaWindow(id: 'primary', label: '5 hours', usedPercent: null),
       ],
       observedAt: DateTime.now().subtract(const Duration(minutes: 20)),
       source: 'Fixture',
       status: QuotaStatus.live,
     );
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: applicationTheme(AppThemeMode.dark),
         home: Scaffold(
-            body: HudOverlay(
-      controller: controller,
-      resetLabel: resetLabel,
-      onDrag: () async {},
-      onExit: () {},
-      onClose: () async {},
-    ))));
-    expect(find.text('STALE'), findsOneWidget);
+          body: HudOverlay(
+            controller: controller,
+            resetLabel: resetLabel,
+            onDrag: () async {},
+            onExit: () {},
+            onClose: () async {},
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Stale'), findsOneWidget);
     expect(find.text('Unknown'), findsOneWidget);
     expect(find.text('Reset time unavailable'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsNothing);

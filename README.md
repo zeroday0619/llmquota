@@ -6,7 +6,7 @@ A Flutter desktop overlay for Codex, Claude, and Antigravity subscription quotas
 
 ## Build and run
 
-Developed with Flutter 3.47.6 and Dart 3.13.5. Install the Flutter stable SDK and the native desktop toolchain for the target operating system.
+Developed with Flutter 3.47.6 and Dart 3.13.5. The vendored UI compatibility layer requires Flutter 3.47.6 or later. Install the Flutter stable SDK and the native desktop toolchain for the target operating system.
 
 ```sh
 flutter pub get
@@ -15,7 +15,7 @@ flutter test
 flutter run -d macos
 ```
 
-Use `-d windows` or `-d linux` on those operating systems. Create a release with `flutter build macos`, `flutter build windows`, or `flutter build linux` on the matching host. Launch the executable with `--demo` to preview sample data without provider access. The settings menu can also toggle demo mode.
+Use `-d windows` or `-d linux` on those operating systems. Create a release with `flutter build macos`, `flutter build windows`, or `flutter build linux` on the matching host. Launch the executable with `--demo` to preview sample data without provider access. Settings > Debug settings can also toggle demo mode.
 
 Run the native window integration test with `flutter test integration_test/desktop_test.dart -d macos`, replacing the device on Windows or Linux. The test uses demo data and checks pinning, opacity, and window size. `.github/workflows/desktop.yml` defines unit tests and release builds for all three operating systems; adding the workflow does not mean those hosted jobs have run.
 
@@ -23,7 +23,7 @@ The macOS build disables App Sandbox because it launches the installed Codex CLI
 
 ## Debug mode
 
-Launch the executable with `--debug` or enable **Debug mode** in the settings menu. Enabling debug mode automatically opens a separate **Debug console** desktop window, including when starting with `--debug` or using HUD mode. The overlay remains usable while the console is open. The console opens on the **Logs** tab and inspects every configured account, including accounts hidden from the quota view. **Metrics** retains the complete numeric diagnostic view.
+Launch the executable with `--debug` or enable **Debug mode** under Settings > Debug settings. Enabling debug mode automatically opens a separate **Debug console** desktop window, including when starting with `--debug` or using HUD mode. The overlay remains usable while the console is open. The console opens on the **Logs** tab and inspects every configured account, including accounts hidden from the quota view. **Metrics** retains the complete numeric diagnostic view.
 
 Log entries use a `dmesg`-style prefix: elapsed seconds since debug activation, provider, and one-based account position. Entries from concurrent accounts share one chronological stream. Codex JSON-RPC logs show outgoing requests, incoming replies, notifications, and correlated numeric request IDs. Antigravity HTTP(S) logs show POST operations, fixed RPC service paths, local port numbers, safe content/protocol metadata, authentication-header presence, status codes, response sizes, and filtered JSON payloads. Claude logs snapshot reads and the optional authentication CLI exchange; transcript content and process-discovery command output are never logged.
 
@@ -34,7 +34,7 @@ Log entries use a `dmesg`-style prefix: elapsed seconds since debug activation, 
 
 The log filter matches text without case sensitivity. **Pause log updates** freezes the displayed buffer while collection continues; resume shows the latest retained entries. **Auto-scroll** follows new entries and stops when the user scrolls away from the end. **Clear logs** clears the shared log buffer without removing quota snapshots or metric diagnostics. The buffer retains the newest 1,000 entries; the Metrics tab reports evicted entries. Notifications are coalesced over 100 ms to bound GUI update frequency during traffic bursts.
 
-Payload logging uses an explicit schema allowlist. Credentials, account/session identifiers, filesystem paths, arbitrary strings, error messages, and unknown fields are redacted or omitted before storage and console IPC. Recognized numeric quota/token fields, booleans, timestamps, and fixed protocol values remain visible. Each payload is limited to 4,096 characters, six nesting levels, 20 list entries, and 100 fields per object. Oversized data is marked `[TRUNCATED]`. This is a filtered protocol trace, not an unfiltered packet capture. Close the console independently and reopen it with **Debug diagnostics** in the settings menu. Disabling debug mode closes the console. Select **Refresh** to collect each account's attempt timestamp, elapsed time, fetch status, exception type when a fetch throws, and whether previous data was retained. Provider-reported failures show their status without an exception type.
+Payload logging uses an explicit schema allowlist. Credentials, account/session identifiers, filesystem paths, arbitrary strings, error messages, and unknown fields are redacted or omitted before storage and console IPC. Recognized numeric quota/token fields, booleans, timestamps, and fixed protocol values remain visible. Each payload is limited to 4,096 characters, six nesting levels, 20 list entries, and 100 fields per object. Oversized data is marked `[TRUNCATED]`. This is a filtered protocol trace, not an unfiltered packet capture. Close the console independently and reopen it with **Open debug console** under Settings > Debug settings. Disabling debug mode closes the console. Select **Refresh** to collect each account's attempt timestamp, elapsed time, fetch status, exception type when a fetch throws, and whether previous data was retained. Provider-reported failures show their status without an exception type.
 
 The dialog also shows account and snapshot counts, the refresh interval, and every normalized usage metric, including metrics for hidden accounts. Observation metrics include the timestamp, age, stale flag, plan, and data availability. Each quota window includes its identifier, label, exact used and remaining percentages, duration, reset timestamp, signed time until reset, and reset-due flag. Today, session, and lifetime token metrics include their source labels and exact total, input, output, cached input, and cache-creation input counts. Credit metrics include the unrounded balance, unlimited flag, availability flag, and reset credits. Missing values show `Unavailable`; reported zero and false values remain distinct. Cache-creation counts are retained separately for Claude while remaining included in input and total tokens. Raw provider fields that the adapters do not retain are outside this view.
 
@@ -64,7 +64,7 @@ Quota never treats missing quota as zero usage. A reset countdown reaching zero 
 
 ### Multiple accounts
 
-Open **Manage accounts** from the settings menu or the empty connection screen. Add an account label and its connection settings. Connected profiles appear simultaneously in the normal overlay and HUD, including multiple profiles from the same provider. The manager also lists disconnected profiles. Edit a profile to rename it or change its connection; remove it to stop displaying it. Removal does not sign out of the provider or delete credentials.
+Open **Manage accounts** under Settings or from the empty connection screen. Add an account label and its connection settings. Connected profiles appear simultaneously in the normal overlay and HUD, including multiple profiles from the same provider. The manager also lists disconnected profiles. Edit a profile to rename it or change its connection; remove it to stop displaying it. Removal does not sign out of the provider or delete credentials.
 
 The initial **Default** profile for each provider keeps the existing environment and local discovery behavior. Added profiles use separate connection settings:
 
@@ -146,16 +146,26 @@ Only literal loopback addresses with an explicit port are accepted. Redirects ar
 
 ## Interface
 
+The desktop UI uses [gbt_fluent2_ui](https://pub.dev/packages/gbt_fluent2_ui) 7.0.0 for Fluent 2 themes, buttons, switches, cards, navigation, and text fields. The package has no general-purpose dialog or slider, so these use Flutter controls styled with the same theme. Dark, light, OLED black, responsive layouts, and unavailable-metric filtering remain available. The visual layer follows the official [Fluent typography](https://fluent2.microsoft.design/typography) and [layout](https://fluent2.microsoft.design/layout) guidance: native system fonts, platform-specific body and caption sizes, sentence-case status labels, a four-pixel spacing grid, Fluent icons, and neutral surfaces with visible card strokes. OLED black is a custom appearance mode. The MIT license is included under About llmquota > Open-source notices.
+
+The dependency resolves to `third_party/gbt_fluent2_ui`, a vendored copy with Flutter SDK compatibility and responsive-button fixes. See its `PATCHES.md` for the source and changes. The original license remains intact.
+
 Service headers show the reported subscription plan when available in both window and HUD modes. Codex uses the quota response's `planType`. Claude uses the optional `claude auth status --json` lookup; set `LLMQUETA_CLAUDE_EXECUTABLE` when the native CLI is not discoverable. Antigravity uses `GetUserStatus` account plan metadata from its internal local protocol. Missing or failed plan lookups leave the quota visible without a plan label. Model names and usage limits are not used to infer a subscription. The Claude `subscriptionType` field was checked against CLI 2.1.285; older or changed CLI versions may omit it. Antigravity plan metadata uses an internal protocol and may change between releases.
 
-- Select **HUD mode** in the settings menu for a small, undecorated panel. HUD always stays on top and caps opacity at 90%; it preserves the normal window's settings for restoration. Drag its header to move it. Use the expand button or press Escape while the HUD has focus to return to the normal window. The close button remains accessible.
+- Select **HUD mode** under Settings > Display settings for a small, undecorated panel. HUD always stays on top and caps opacity at 90%; it preserves the normal window's settings for restoration. Drag its header to move it. Use the expand button or press Escape while the HUD has focus to return to the normal window. The close button remains accessible.
 - The HUD choice is saved when changed through the UI. Launch with `--hud` to start in HUD mode without changing the saved choice. For example: `open build/macos/Build/Products/Release/llmquota.app --args --hud` after closing an existing instance.
 - Providers with reported quota windows, token counts, or credit data appear. Unavailable providers stay hidden; an empty state links to setup when no provider is connected. Previously connected providers retain their last observation with a stale indicator during transient errors.
 - macOS uses its native title bar and traffic-light controls in a separate area above the Flutter content. Other desktop platforms use the in-app close button.
-- Window height adapts to the visible quota, token, and credit rows, with scrolling for longer lists.
+- Quota cards use one column in narrow windows and up to four columns in wider windows. The content width is capped at 1,440 logical pixels. Larger system text reduces the number of columns to preserve readability.
+- Initial window size is bounded by the current display size with margins for window chrome. Automatic content updates preserve the user-selected width and preserve height when the required content height is unchanged. These bounds use display dimensions rather than the operating system taskbar or dock work area.
+- Long quota lists and settings screens scroll. Dialog actions scroll with their content on short windows, and the debug toolbar scrolls horizontally when needed.
 - Drag the title area to move the overlay.
 - Pin or unpin it using the pin button.
-- Use settings for compact view, opacity, demo data, and connection help.
+- Open Settings with the settings button or Ctrl/Cmd+comma in normal window mode. Return from HUD with the expand button or Escape before opening settings.
+- **Display settings** contains Dark, Light, and OLED black themes, HUD, compact view, pinning, and opacity. Changes remain a draft until **Apply** updates the window and saves them. **Cancel** discards the draft. Theme selection is saved across launches and also applies to HUD, dialogs, and the debug console. OLED black uses pure black backgrounds and surfaces.
+- **Manage accounts** opens account profiles. **Connect providers** shows setup requirements.
+- **Debug settings** controls session-only debug mode and demo data, reopens the console, and clears communication logs.
+- **About llmquota** shows the developer and build version (with the bundled package manifest as a fallback). The app license and dependency open-source notices open in separate screens.
 - Refresh manually with the refresh button or Ctrl/Cmd+R. Automatic refresh runs every 60 seconds.
 - Hover over a reset countdown to see the local reset timestamp.
 
@@ -163,7 +173,7 @@ Window behavior on Linux depends on the window manager and compositor. In partic
 
 ## Token usage and credits
 
-Every visible provider has today, session, and cumulative token rows in normal, compact, and HUD modes. Missing measurements show `Unavailable`, not zero. Large counts use K/M/B; hover over a row for the exact total, available input/output/cache breakdown, and source notes. Cached input is already included in input tokens and is not added again.
+Normal, compact, and HUD modes show today, session, and cumulative token rows only when measurements are available. Missing measurements and credit entries without a balance or availability flag are hidden. Reported zero values remain visible. Debug diagnostics retain unavailable measurements. Large counts use K/M/B; hover over a row for the exact total, available input/output/cache breakdown, and source notes. Cached input is already included in input tokens and is not added again.
 
 | Provider | Today | Session | Cumulative |
 | --- | --- | --- | --- |
@@ -175,7 +185,7 @@ Codex token activity uses `account/usage/read`, verified with CLI 0.160.1. Sessi
 
 Claude totals use API-message usage records, deduplicated by message ID. They include cache-read and cache-creation input tokens. Statusline context-window occupancy is not summed as session usage. Deleted or unrecorded transcripts are outside the local total. Unreadable, malformed, or oversized history makes totals unavailable rather than displaying a partial sum; scans are limited to 64 MiB per file, 256 MiB overall, and 10,000 files.
 
-When Codex returns `credits`, the app displays its balance as whole credits, truncating fractional digits, or its unlimited state. The exact reported balance remains available in the tooltip. An availability flag without a balance is shown as available without inventing an amount. `Reset credits` is a separate count of earned rate-limit resets, not a currency balance. No credits are spent or redeemed. Claude and Antigravity credit balances are not exposed by the current adapters; quota percentages and cost fields are not converted into credits or tokens.
+When Codex returns `credits`, the app displays its balance as whole credits, truncating fractional digits, or its unlimited state. The exact reported balance remains available in the tooltip. An availability flag without a balance is shown as `Available` or `No credits` without inventing an amount. `Reset credits` is a separate count of earned rate-limit resets, not a currency balance. No credits are spent or redeemed. Claude and Antigravity credit balances are not exposed by the current adapters; quota percentages and cost fields are not converted into credits or tokens.
 
 ## Packaging
 

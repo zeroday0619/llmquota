@@ -11,8 +11,8 @@ import 'quota_sources.dart';
 
 typedef QuotaFetcher = Future<QuotaSnapshot> Function(ProviderKind provider);
 
-typedef AccountQuotaFetcher = Future<QuotaSnapshot> Function(
-    QuotaAccount account);
+typedef AccountQuotaFetcher =
+    Future<QuotaSnapshot> Function(QuotaAccount account);
 
 @immutable
 class RefreshDiagnostic {
@@ -38,13 +38,14 @@ class QuotaController extends ChangeNotifier {
     AccountQuotaFetcher? accountFetcher,
     Future<void> Function(List<QuotaAccount>)? saveAccounts,
     bool debugMode = false,
-  })  : _debugMode = debugMode,
-        _accounts = List.unmodifiable(accounts ?? QuotaAccount.defaults),
-        _fetcher = accountFetcher ??
-            (fetcher == null
-                ? QuotaSources().fetchAccount
-                : (account) => fetcher(account.provider)),
-        _saveAccounts = saveAccounts {
+  }) : _debugMode = debugMode,
+       _accounts = List.unmodifiable(accounts ?? QuotaAccount.defaults),
+       _fetcher =
+           accountFetcher ??
+           (fetcher == null
+               ? QuotaSources().fetchAccount
+               : (account) => fetcher(account.provider)),
+       _saveAccounts = saveAccounts {
     validateAccounts(_accounts);
     if (_debugMode) _debugClock.start();
   }
@@ -86,11 +87,14 @@ class QuotaController extends ChangeNotifier {
     if (!_debugMode || _disposed) return;
     final index = _accounts.indexWhere((item) => item.id == account.id);
     if (index < 0) return;
-    _debugLogs.add(DebugLogEntry(
+    _debugLogs.add(
+      DebugLogEntry(
         elapsed: _debugClock.elapsed,
         provider: account.provider,
         accountNumber: index + 1,
-        message: message));
+        message: message,
+      ),
+    );
     if (_debugLogs.length > 1000) {
       _debugLogs.removeAt(0);
       _droppedDebugLogCount++;
@@ -125,7 +129,7 @@ class QuotaController extends ChangeNotifier {
       await _saveAccounts?.call(next);
       if (_disposed) return;
       final previousAccounts = {
-        for (final account in _accounts) account.id: account
+        for (final account in _accounts) account.id: account,
       };
       _generation++;
       _diagnostics.clear();
@@ -133,10 +137,14 @@ class QuotaController extends ChangeNotifier {
       _debugLogs.clear();
       _droppedDebugLogCount = 0;
       refreshing = false;
-      snapshots.removeWhere((id, snapshot) => !next.any((account) =>
-          account.id == id &&
-          previousAccounts[id] != null &&
-          account.hasSameConnection(previousAccounts[id]!)));
+      snapshots.removeWhere(
+        (id, snapshot) => !next.any(
+          (account) =>
+              account.id == id &&
+              previousAccounts[id] != null &&
+              account.hasSameConnection(previousAccounts[id]!),
+        ),
+      );
       _accounts = next;
       for (final account in next) {
         final snapshot = snapshots[account.id];
@@ -151,13 +159,16 @@ class QuotaController extends ChangeNotifier {
   }
 
   List<QuotaSnapshot> get visibleSnapshots => [
-        for (final account in accounts)
-          if (snapshots[account.id] case final snapshot?)
-            if (snapshot.hasUsage &&
-                {QuotaStatus.live, QuotaStatus.stale, QuotaStatus.demo}
-                    .contains(snapshot.status))
-              snapshot,
-      ];
+    for (final account in accounts)
+      if (snapshots[account.id] case final snapshot?)
+        if (snapshot.hasUsage &&
+            {
+              QuotaStatus.live,
+              QuotaStatus.stale,
+              QuotaStatus.demo,
+            }.contains(snapshot.status))
+          snapshot,
+  ];
   Timer? _timer;
   bool refreshing = false;
   bool demo = false;
@@ -208,33 +219,37 @@ class QuotaController extends ChangeNotifier {
             snapshot = await runZoned(
               () => _fetcher(account),
               zoneValues: {
-                communicationDiagnosticSinkKey:
-                    (CommunicationDiagnostic diagnostic) {
+                communicationDiagnosticSinkKey: (CommunicationDiagnostic diagnostic) {
                   if (_disposed ||
                       generation != _generation ||
                       !_debugMode ||
-                      debugGeneration != _debugGeneration) return;
+                      debugGeneration != _debugGeneration)
+                    return;
                   _log(
-                      account,
-                      '${diagnostic.protocol} ${diagnostic.direction} ${diagnostic.operation}'
-                      '${diagnostic.statusCode == null ? '' : ' status=${diagnostic.statusCode}'}'
-                      '${diagnostic.bytes == null ? '' : ' bytes=${diagnostic.bytes}'} ${diagnostic.detail}');
+                    account,
+                    '${diagnostic.protocol} ${diagnostic.direction} ${diagnostic.operation}'
+                    '${diagnostic.statusCode == null ? '' : ' status=${diagnostic.statusCode}'}'
+                    '${diagnostic.bytes == null ? '' : ' bytes=${diagnostic.bytes}'} ${diagnostic.detail}',
+                  );
                   notifyListeners();
                 },
-                integrationDiagnosticSinkKey:
-                    (IntegrationDiagnostic diagnostic) {
+                integrationDiagnosticSinkKey: (IntegrationDiagnostic diagnostic) {
                   if (_disposed ||
                       generation != _generation ||
                       !_debugMode ||
-                      debugGeneration != _debugGeneration) return;
+                      debugGeneration != _debugGeneration)
+                    return;
                   final events = _integrationDiagnostics.putIfAbsent(
-                      account.id, () => <IntegrationDiagnostic>[]);
+                    account.id,
+                    () => <IntegrationDiagnostic>[],
+                  );
                   events.add(diagnostic);
                   _log(
-                      account,
-                      'integration ${diagnostic.stage} ${diagnostic.outcome} duration_us=${diagnostic.elapsed.inMicroseconds}'
-                      '${diagnostic.errorType == null ? '' : ' error=${diagnostic.errorType}'}'
-                      '${diagnostic.metrics.entries.map((entry) => ' ${entry.key}=${entry.value}').join()}');
+                    account,
+                    'integration ${diagnostic.stage} ${diagnostic.outcome} duration_us=${diagnostic.elapsed.inMicroseconds}'
+                    '${diagnostic.errorType == null ? '' : ' error=${diagnostic.errorType}'}'
+                    '${diagnostic.metrics.entries.map((entry) => ' ${entry.key}=${entry.value}').join()}',
+                  );
                   if (events.length > 200) {
                     events.removeRange(0, events.length - 200);
                   }
@@ -265,7 +280,8 @@ class QuotaController extends ChangeNotifier {
         if (_disposed || generation != _generation) return;
         final resultStatus = snapshot.status;
         final previous = snapshots[account.id];
-        final retainedPrevious = snapshot.status == QuotaStatus.error &&
+        final retainedPrevious =
+            snapshot.status == QuotaStatus.error &&
             previous != null &&
             previous.hasUsage;
         if (retainedPrevious) {
@@ -285,8 +301,10 @@ class QuotaController extends ChangeNotifier {
         if (captureDiagnostics &&
             _debugMode &&
             debugGeneration == _debugGeneration) {
-          _log(account,
-              'refresh end status=${resultStatus.name} retained_previous=$retainedPrevious duration_us=${stopwatch!.elapsed.inMicroseconds}${errorType == null ? '' : ' error=$errorType'}');
+          _log(
+            account,
+            'refresh end status=${resultStatus.name} retained_previous=$retainedPrevious duration_us=${stopwatch!.elapsed.inMicroseconds}${errorType == null ? '' : ' error=$errorType'}',
+          );
           _diagnostics[account.id] = RefreshDiagnostic(
             attemptedAt: attemptedAt!,
             elapsed: stopwatch.elapsed,
@@ -314,7 +332,11 @@ class QuotaController extends ChangeNotifier {
       tokenUsage: const TokenUsage(
         today: TokenCount(total: 125000, input: 100000, output: 25000),
         session: TokenCount(
-            total: 32000, input: 27000, output: 5000, cachedInput: 16000),
+          total: 32000,
+          input: 27000,
+          output: 5000,
+          cachedInput: 16000,
+        ),
         lifetime: TokenCount(total: 4200000),
         note: 'Sample token counts.',
       ),
@@ -324,15 +346,17 @@ class QuotaController extends ChangeNotifier {
       windows: [
         QuotaWindow(
           id: 'primary',
-          label:
-              provider == ProviderKind.antigravity ? 'Gemini Pro' : '5 hours',
+          label: provider == ProviderKind.antigravity
+              ? 'Gemini Pro'
+              : '5 hours',
           usedPercent: [28.0, 64.0, 12.0][provider.index],
           resetsAt: now.add(const Duration(hours: 2, minutes: 18)),
         ),
         QuotaWindow(
           id: 'secondary',
-          label:
-              provider == ProviderKind.antigravity ? 'Claude Sonnet' : '7 days',
+          label: provider == ProviderKind.antigravity
+              ? 'Claude Sonnet'
+              : '7 days',
           usedPercent: [43.0, 21.0, 36.0][provider.index],
           resetsAt: now.add(const Duration(days: 3, hours: 7)),
         ),

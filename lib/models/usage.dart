@@ -58,10 +58,11 @@ CreditBalance? parseCreditBalance(Object? value) {
   final text = raw is String
       ? raw.trim()
       : raw is num
-          ? raw.toString()
-          : null;
+      ? raw.toString()
+      : null;
   final numeric = text == null ? null : double.tryParse(text);
-  final balance = numeric != null &&
+  final balance =
+      numeric != null &&
           numeric.isFinite &&
           numeric >= 0 &&
           RegExp(r'^\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$').hasMatch(text!)
@@ -88,15 +89,16 @@ TokenUsage parseCodexTokenUsage(
   final summary = _object(result['summary']);
   final lifetime = nonnegativeTokenCount(summary?['lifetimeTokens']);
   final date = now ?? DateTime.now();
-  final todayKey = '${date.year.toString().padLeft(4, '0')}-'
+  final todayKey =
+      '${date.year.toString().padLeft(4, '0')}-'
       '${date.month.toString().padLeft(2, '0')}-'
       '${date.day.toString().padLeft(2, '0')}';
   final buckets = result['dailyUsageBuckets'];
   final matching = buckets is List
       ? buckets
-          .map(_object)
-          .where((bucket) => bucket?['startDate'] == todayKey)
-          .toList()
+            .map(_object)
+            .where((bucket) => bucket?['startDate'] == todayKey)
+            .toList()
       : <Map<String, dynamic>?>[];
   final today = matching.length == 1
       ? nonnegativeTokenCount(matching.single?['tokens'])

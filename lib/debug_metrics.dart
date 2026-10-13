@@ -8,14 +8,14 @@ String _timestamp(DateTime? value) =>
     value?.toUtc().toIso8601String() ?? 'Unavailable';
 
 List<String> _tokens(String heading, String? label, TokenCount? count) => [
-      heading,
-      'Label: ${_value(label)}',
-      'Total: ${_value(count?.total)}',
-      'Input: ${_value(count?.input)}',
-      'Output: ${_value(count?.output)}',
-      'Cached input: ${_value(count?.cachedInput)}',
-      'Cache creation input: ${_value(count?.cachedCreationInput)}',
-    ];
+  heading,
+  'Label: ${_value(label)}',
+  'Total: ${_value(count?.total)}',
+  'Input: ${_value(count?.input)}',
+  'Output: ${_value(count?.output)}',
+  'Cached input: ${_value(count?.cachedInput)}',
+  'Cache creation input: ${_value(count?.cachedCreationInput)}',
+];
 
 List<String> buildDebugMetricLines(QuotaSnapshot? snapshot, DateTime now) {
   final observation = snapshot;
@@ -25,7 +25,7 @@ List<String> buildDebugMetricLines(QuotaSnapshot? snapshot, DateTime now) {
   final stale = observation == null
       ? null
       : observation.status == QuotaStatus.stale ||
-          (observation.status == QuotaStatus.live && age!.inMinutes >= 10);
+            (observation.status == QuotaStatus.live && age!.inMinutes >= 10);
   final usage = observation?.tokenUsage;
   final credits = observation?.creditBalance;
   return <String>[

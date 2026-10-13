@@ -9,8 +9,9 @@ import 'package:llmquota/main.dart' as application;
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('native overlay renders and applies window controls',
-      (tester) async {
+  testWidgets('native overlay renders and applies window controls', (
+    tester,
+  ) async {
     await application.main(['--demo']);
     await tester.pumpAndSettle();
     expect(find.text('Codex'), findsOneWidget);

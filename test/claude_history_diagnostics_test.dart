@@ -27,17 +27,21 @@ void main() {
     );
   }
 
-  test('reports unavailable history without private configuration paths',
-      () async {
-    await capture({'CLAUDE_CONFIG_DIR': directory.path});
-    expect(events.single.stage, 'claude.history.noHistory');
-    expect(events.single.outcome, 'unavailable');
-    expect(buildIntegrationDiagnosticLines(events).join('\n'),
-        isNot(contains(directory.path)));
-    events.clear();
-    await capture({});
-    expect(events.single.stage, 'claude.history.noHistory');
-  });
+  test(
+    'reports unavailable history without private configuration paths',
+    () async {
+      await capture({'CLAUDE_CONFIG_DIR': directory.path});
+      expect(events.single.stage, 'claude.history.noHistory');
+      expect(events.single.outcome, 'unavailable');
+      expect(
+        buildIntegrationDiagnosticLines(events).join('\n'),
+        isNot(contains(directory.path)),
+      );
+      events.clear();
+      await capture({});
+      expect(events.single.stage, 'claude.history.noHistory');
+    },
+  );
 
   test('reports malformed transcript error type and scan counters', () async {
     final projects = await Directory('${directory.path}/projects').create();
@@ -57,36 +61,46 @@ void main() {
     expect(report, isNot(contains('secret-transcript')));
   });
 
-  test('reports successful scan counters while preserving token totals',
-      () async {
-    final projects = await Directory('${directory.path}/projects').create();
-    final transcript = File('${projects.path}/transcript.jsonl');
-    await transcript.writeAsString(jsonEncode({
-      'type': 'assistant',
-      'timestamp': '2026-10-13T00:00:00Z',
-      'message': {
-        'id': 'private-message-id',
-        'usage': {'input_tokens': 12, 'output_tokens': 3},
-      },
-    }));
-    final usage = await runZoned(
-      () => readClaudeTokenUsage(
-          environment: {'CLAUDE_CONFIG_DIR': directory.path}),
-      zoneValues: {
-        integrationDiagnosticSinkKey: (IntegrationDiagnostic event) =>
-            events.add(event),
-      },
-    );
-    expect(usage.lifetime?.total, 15);
-    final event = events.single;
-    expect(event.stage, 'claude.history.scan.success');
-    expect(event.outcome, 'success');
-    expect(event.attemptedAt.isUtc, isTrue);
-    expect(event.metrics,
-        {'bytes': await transcript.length(), 'files': 1, 'records': 1});
-    expect(buildIntegrationDiagnosticLines(events).join('\n'),
-        isNot(contains('private-message-id')));
-  });
+  test(
+    'reports successful scan counters while preserving token totals',
+    () async {
+      final projects = await Directory('${directory.path}/projects').create();
+      final transcript = File('${projects.path}/transcript.jsonl');
+      await transcript.writeAsString(
+        jsonEncode({
+          'type': 'assistant',
+          'timestamp': '2026-10-13T00:00:00Z',
+          'message': {
+            'id': 'private-message-id',
+            'usage': {'input_tokens': 12, 'output_tokens': 3},
+          },
+        }),
+      );
+      final usage = await runZoned(
+        () => readClaudeTokenUsage(
+          environment: {'CLAUDE_CONFIG_DIR': directory.path},
+        ),
+        zoneValues: {
+          integrationDiagnosticSinkKey: (IntegrationDiagnostic event) =>
+              events.add(event),
+        },
+      );
+      expect(usage.lifetime?.total, 15);
+      final event = events.single;
+      expect(event.stage, 'claude.history.scan.success');
+      expect(event.outcome, 'success');
+      expect(event.attemptedAt.isUtc, isTrue);
+      expect(event.metrics, {
+        'bytes': await transcript.length(),
+        'files': 1,
+        'records': 1,
+      });
+      expect(
+        buildIntegrationDiagnosticLines(events).join('\n'),
+        isNot(contains('private-message-id')),
+      );
+    },
+  );
 
   test('reports empty retained history', () async {
     await Directory('${directory.path}/projects').create();

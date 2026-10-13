@@ -7,65 +7,74 @@ void main() {
 
   test('Codex reads the reported account plan without using model names', () {
     expect(
-        parseCodexQuota({
-          'rateLimits': {'planType': 'plus'}
-        }).planName,
-        'Plus');
+      parseCodexQuota({
+        'rateLimits': {'planType': 'plus'},
+      }).planName,
+      'Plus',
+    );
     expect(
-        parseCodexQuota({
-          'rate_limits': {'plan_type': 'pro'}
-        }).planName,
-        'Pro');
+      parseCodexQuota({
+        'rate_limits': {'plan_type': 'pro'},
+      }).planName,
+      'Pro',
+    );
     expect(
-        parseCodexQuota({
-          'rateLimits': {'planType': 'free'},
-          'rateLimitsByLimitId': {
-            'codex': {'planType': 'business'},
-            'review': {'planType': 'pro'},
-          },
-        }).planName,
-        'Business');
+      parseCodexQuota({
+        'rateLimits': {'planType': 'free'},
+        'rateLimitsByLimitId': {
+          'codex': {'planType': 'business'},
+          'review': {'planType': 'pro'},
+        },
+      }).planName,
+      'Business',
+    );
     expect(
-        parseCodexQuota({
-          'rateLimitsByLimitId': {
-            'review': {'planType': 'pro'}
-          },
-        }).planName,
-        isNull);
+      parseCodexQuota({
+        'rateLimitsByLimitId': {
+          'review': {'planType': 'pro'},
+        },
+      }).planName,
+      isNull,
+    );
     expect(parseCodexQuota({'limitName': 'Pro'}).planName, isNull);
     for (final value in [null, '', '  ', 'unknown', 42, 'Plus\nPro']) {
       expect(parseCodexQuota({'planType': value}).planName, isNull);
     }
     expect(
-        parseCodexQuota({'planType': 'future_plan'}).planName, 'future_plan');
+      parseCodexQuota({'planType': 'future_plan'}).planName,
+      'future_plan',
+    );
   });
 
   test('Antigravity uses account plan names rather than model tiers', () {
     expect(
-        parseAntigravityQuota({
-          'userStatus': {
-            'planStatus': {
-              'planInfo': {'planName': 'Google AI Pro'}
-            }
+      parseAntigravityQuota({
+        'userStatus': {
+          'planStatus': {
+            'planInfo': {'planName': 'Google AI Pro'},
           },
-        }).planName,
-        'Google AI Pro');
+        },
+      }).planName,
+      'Google AI Pro',
+    );
     expect(
-        parseAntigravityQuota({
-          'models': {
-            'pro': {'displayName': 'Gemini Pro'}
-          },
-          'userStatus': {'teamsTier': 'PRO'},
-        }).planName,
-        isNull);
+      parseAntigravityQuota({
+        'models': {
+          'pro': {'displayName': 'Gemini Pro'},
+        },
+        'userStatus': {'teamsTier': 'PRO'},
+      }).planName,
+      isNull,
+    );
   });
 
   test('Claude only uses explicitly supplied account plan metadata', () {
     expect(
-        parseClaudeQuota({
-          'model': {'display_name': 'Pro'}
-        }).planName,
-        isNull);
+      parseClaudeQuota({
+        'model': {'display_name': 'Pro'},
+      }).planName,
+      isNull,
+    );
     expect(parseClaudeQuota({}, planName: ' Max ').planName, 'Max');
   });
 

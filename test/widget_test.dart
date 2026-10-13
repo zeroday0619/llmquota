@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llmquota/app.dart';
+import 'package:llmquota/settings_dialog.dart';
 import 'package:llmquota/models/quota.dart';
 import 'package:llmquota/models/usage.dart';
 import 'package:llmquota/services/preferences.dart';
@@ -85,47 +86,55 @@ void main() {
     await tester.pump();
     expect(find.text('Codex'), findsOneWidget);
     expect(find.text('Claude'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Antigravity'), 200,
-        scrollable: find.byType(Scrollable));
+    await tester.scrollUntilVisible(
+      find.text('Antigravity'),
+      200,
+      scrollable: find.byType(Scrollable),
+    );
     expect(find.text('Antigravity').hitTestable(), findsOneWidget);
-    expect(find.text('DEMO · SAMPLE DATA'), findsOneWidget);
+    expect(find.text('Demo · sample data'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     controller.dispose();
   });
 
   for (final compact in [false, true]) {
-    testWidgets('plan labels fit narrow cards with compact=$compact',
-        (tester) async {
+    testWidgets('plan labels fit narrow cards with compact=$compact', (
+      tester,
+    ) async {
       const planName =
           'Enterprise subscription with an unusually long plan name';
-      await mountOverlay(tester, compact: compact, snapshots: [
-        QuotaSnapshot(
-          provider: ProviderKind.antigravity,
-          windows: [
-            QuotaWindow(id: 'primary', label: 'Usage', usedPercent: 20)
-          ],
-          observedAt: DateTime.now(),
-          source: 'Fixture',
-          status: QuotaStatus.live,
-          planName: planName,
-        ),
-        QuotaSnapshot(
-          provider: ProviderKind.codex,
-          windows: [
-            QuotaWindow(id: 'primary', label: 'Usage', usedPercent: 20)
-          ],
-          observedAt: DateTime.now(),
-          source: 'Fixture',
-          status: QuotaStatus.live,
-        ),
-      ]);
+      await mountOverlay(
+        tester,
+        compact: compact,
+        snapshots: [
+          QuotaSnapshot(
+            provider: ProviderKind.antigravity,
+            windows: [
+              QuotaWindow(id: 'primary', label: 'Usage', usedPercent: 20),
+            ],
+            observedAt: DateTime.now(),
+            source: 'Fixture',
+            status: QuotaStatus.live,
+            planName: planName,
+          ),
+          QuotaSnapshot(
+            provider: ProviderKind.codex,
+            windows: [
+              QuotaWindow(id: 'primary', label: 'Usage', usedPercent: 20),
+            ],
+            observedAt: DateTime.now(),
+            source: 'Fixture',
+            status: QuotaStatus.live,
+          ),
+        ],
+      );
       expect(find.text('Antigravity'), findsOneWidget);
       expect(find.text('Codex'), findsOneWidget);
       expect(find.text(planName), findsOneWidget);
       expect(find.byTooltip(planName), findsOneWidget);
       final label = tester.widget<Text>(find.text(planName));
-      expect(label.maxLines, 1);
+      expect(label.maxLines, 2);
       expect(label.overflow, TextOverflow.ellipsis);
       expect(tester.takeException(), isNull);
     });
@@ -159,37 +168,37 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('disconnected and empty error snapshots show connection guidance',
-      (
-    tester,
-  ) async {
-    await mountOverlay(
-      tester,
-      snapshots: [
-        QuotaSnapshot(
-          provider: ProviderKind.claude,
-          windows: [],
-          observedAt: DateTime.now(),
-          source: 'Claude statusline',
-          status: QuotaStatus.error,
-          message:
-              'The snapshot is unreadable. Run the statusline bridge again.',
-        ),
-      ],
-    );
-    expect(find.text('No connected platforms'), findsOneWidget);
-    expect(find.text('Connect providers'), findsOneWidget);
-    expect(find.text('Codex'), findsNothing);
-    expect(find.text('Claude'), findsNothing);
-    expect(find.text('Antigravity'), findsNothing);
-    expect(find.text('NOT CONNECTED'), findsNothing);
-    expect(find.text('ERROR'), findsNothing);
-    await tester.tap(find.text('Connect providers'));
-    await tester.pumpAndSettle();
-    expect(find.byType(AlertDialog), findsOneWidget);
-    expect(find.byType(LinearProgressIndicator), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'disconnected and empty error snapshots show connection guidance',
+    (tester) async {
+      await mountOverlay(
+        tester,
+        snapshots: [
+          QuotaSnapshot(
+            provider: ProviderKind.claude,
+            windows: [],
+            observedAt: DateTime.now(),
+            source: 'Claude statusline',
+            status: QuotaStatus.error,
+            message:
+                'The snapshot is unreadable. Run the statusline bridge again.',
+          ),
+        ],
+      );
+      expect(find.text('No connected platforms'), findsOneWidget);
+      expect(find.text('Connect providers'), findsOneWidget);
+      expect(find.text('Codex'), findsNothing);
+      expect(find.text('Claude'), findsNothing);
+      expect(find.text('Antigravity'), findsNothing);
+      expect(find.text('Not connected'), findsNothing);
+      expect(find.text('Error'), findsNothing);
+      await tester.tap(find.text('Connect providers'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ResponsiveSettingsSurface), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'old observations and elapsed resets preserve the measured quota',
@@ -214,7 +223,7 @@ void main() {
           ),
         ],
       );
-      expect(find.text('STALE'), findsOneWidget);
+      expect(find.text('Stale'), findsOneWidget);
       expect(find.text('20% left'), findsOneWidget);
       expect(find.text('Reset due · awaiting fresh data'), findsOneWidget);
       expect(find.textContaining('refresh needed'), findsOneWidget);
@@ -226,84 +235,98 @@ void main() {
     },
   );
 
-  testWidgets(
-    'compact view retains stale data and fits long model labels',
-    (tester) async {
-      await mountOverlay(
-        tester,
-        compact: true,
-        snapshots: [
-          QuotaSnapshot(
-            provider: ProviderKind.codex,
-            windows: [
-              QuotaWindow(
-                id: 'review',
-                label:
-                    'Additional code review allowance for a long named model',
-                usedPercent: 90,
-              ),
-            ],
-            observedAt: DateTime.now(),
-            source: 'Private fixture source',
-            status: QuotaStatus.stale,
-            message: 'Connection lost. Displaying the last observation.',
-          ),
-        ],
-      );
-      expect(find.text('STALE'), findsOneWidget);
-      expect(find.text('10% left'), findsOneWidget);
-      expect(
-        find.text('Connection lost. Displaying the last observation.'),
-        findsOneWidget,
-      );
-      expect(find.textContaining('Private fixture source'), findsNothing);
-      await tester.drag(find.byType(ListView), const Offset(0, -400));
-      await tester.pump();
-      expect(find.text('Codex'), findsOneWidget);
-      expect(find.text('Claude'), findsNothing);
-      expect(find.text('Antigravity'), findsNothing);
-      expect(tester.takeException(), isNull);
-    },
-  );
+  testWidgets('compact view retains stale data and fits long model labels', (
+    tester,
+  ) async {
+    await mountOverlay(
+      tester,
+      compact: true,
+      snapshots: [
+        QuotaSnapshot(
+          provider: ProviderKind.codex,
+          windows: [
+            QuotaWindow(
+              id: 'review',
+              label: 'Additional code review allowance for a long named model',
+              usedPercent: 90,
+            ),
+          ],
+          observedAt: DateTime.now(),
+          source: 'Private fixture source',
+          status: QuotaStatus.stale,
+          message: 'Connection lost. Displaying the last observation.',
+        ),
+      ],
+    );
+    expect(find.text('Stale'), findsOneWidget);
+    expect(find.text('10% left'), findsOneWidget);
+    expect(
+      find.text('Connection lost. Displaying the last observation.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Private fixture source'), findsNothing);
+    await tester.drag(
+      find.byType(SingleChildScrollView).first,
+      const Offset(0, -400),
+    );
+    await tester.pump();
+    expect(find.text('Codex'), findsOneWidget);
+    expect(find.text('Claude'), findsNothing);
+    expect(find.text('Antigravity'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   for (final compact in [false, true]) {
     testWidgets(
-        'token-only usage and credit balances render with compact=$compact',
-        (tester) async {
-      await mountOverlay(tester, compact: compact, snapshots: [
-        QuotaSnapshot(
-          provider: ProviderKind.codex,
-          windows: [],
-          observedAt: DateTime.now(),
-          source: 'Fixture',
-          status: QuotaStatus.live,
-          tokenUsage: const TokenUsage(
-            today: TokenCount(
-                total: 12345, input: 12000, output: 345, cachedInput: 1000),
-            session: TokenCount(total: 2000000),
-            note: 'Local observations only.',
-          ),
-          creditBalance: const CreditBalance(balance: '12.345'),
-          resetCredits: 2,
-        ),
-      ]);
-      expect(find.text('Today tokens'), findsOneWidget);
-      expect(find.text('Session tokens'), findsOneWidget);
-      expect(find.text('Lifetime tokens'), findsOneWidget);
-      expect(find.text('12.3K'), findsOneWidget);
-      expect(find.text('2M'), findsOneWidget);
-      expect(find.text('Unavailable'), findsOneWidget);
-      expect(find.text('12 credits'), findsOneWidget);
-      expect(find.byTooltip('Provider-reported credit balance: 12.345 credits'),
-          findsOneWidget);
-      expect(find.text('Reset credits'), findsOneWidget);
-      expect(find.text('No quota data available.'), findsNothing);
-      expect(
+      'token-only usage and credit balances render with compact=$compact',
+      (tester) async {
+        await mountOverlay(
+          tester,
+          compact: compact,
+          snapshots: [
+            QuotaSnapshot(
+              provider: ProviderKind.codex,
+              windows: [],
+              observedAt: DateTime.now(),
+              source: 'Fixture',
+              status: QuotaStatus.live,
+              tokenUsage: const TokenUsage(
+                today: TokenCount(
+                  total: 12345,
+                  input: 12000,
+                  output: 345,
+                  cachedInput: 1000,
+                ),
+                session: TokenCount(total: 2000000),
+                note: 'Local observations only.',
+              ),
+              creditBalance: const CreditBalance(balance: '12.345'),
+              resetCredits: 2,
+            ),
+          ],
+        );
+        expect(find.text('Today tokens'), findsOneWidget);
+        expect(find.text('Session tokens'), findsOneWidget);
+        expect(find.text('Lifetime tokens'), findsNothing);
+        expect(find.text('12.3K'), findsOneWidget);
+        expect(find.text('2M'), findsOneWidget);
+        expect(find.text('Unavailable'), findsNothing);
+        expect(find.text('12 credits'), findsOneWidget);
+        expect(
+          find.byTooltip('Provider-reported credit balance: 12.345 credits'),
+          findsOneWidget,
+        );
+        expect(find.text('Reset credits'), findsOneWidget);
+        expect(find.text('No quota data available.'), findsNothing);
+        expect(
           find.byTooltip(
-              '12345 tokens\nInput: 12000\nOutput: 345\nCached input: 1000 (included in input)\nLocal observations only.'),
-          findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
+            '12345 tokens\nInput: 12000\nOutput: 345\nCached input: 1000 (included in input)\nLocal observations only.',
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   testWidgets('empty refresh indicates connection checks', (tester) async {
@@ -315,11 +338,14 @@ void main() {
   });
 
   for (final platform in [TargetPlatform.macOS, TargetPlatform.windows]) {
-    testWidgets('close control follows $platform native decoration',
-        (tester) async {
+    testWidgets('close control follows $platform native decoration', (
+      tester,
+    ) async {
       await mountOverlay(tester);
-      expect(find.byTooltip('Close'),
-          platform == TargetPlatform.macOS ? findsNothing : findsOneWidget);
+      expect(
+        find.byTooltip('Close'),
+        platform == TargetPlatform.macOS ? findsNothing : findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     }, variant: TargetPlatformVariant.only(platform));
   }

@@ -44,8 +44,8 @@ class QuotaSnapshot {
     this.tokenUsage = const TokenUsage(),
     this.creditBalance,
     this.resetCredits,
-  })  : windows = List.unmodifiable(windows),
-        observedAt = observedAt.toUtc();
+  }) : windows = List.unmodifiable(windows),
+       observedAt = observedAt.toUtc();
 
   final ProviderKind provider;
   final String? accountId;
@@ -67,23 +67,24 @@ class QuotaSnapshot {
       resetCredits != null;
 
   QuotaSnapshot withAccount(QuotaAccount account) => QuotaSnapshot(
-        provider: provider,
-        accountId: account.id,
-        accountLabel: account.label,
-        windows: windows,
-        observedAt: observedAt,
-        source: source,
-        status: status,
-        message: message,
-        planName: planName,
-        tokenUsage: tokenUsage,
-        creditBalance: creditBalance,
-        resetCredits: resetCredits,
-      );
+    provider: provider,
+    accountId: account.id,
+    accountLabel: account.label,
+    windows: windows,
+    observedAt: observedAt,
+    source: source,
+    status: status,
+    message: message,
+    planName: planName,
+    tokenUsage: tokenUsage,
+    creditBalance: creditBalance,
+    resetCredits: resetCredits,
+  );
 
   QuotaSnapshot withUsage({TokenUsage? tokenUsage}) {
     final usage = tokenUsage ?? this.tokenUsage;
-    final available = windows.isNotEmpty ||
+    final available =
+        windows.isNotEmpty ||
         usage.hasData ||
         creditBalance != null ||
         resetCredits != null;
@@ -94,7 +95,8 @@ class QuotaSnapshot {
       windows: windows,
       observedAt: observedAt,
       source: source,
-      status: available &&
+      status:
+          available &&
               (status == QuotaStatus.unavailable ||
                   (status == QuotaStatus.error && usage.hasData))
           ? QuotaStatus.live
@@ -102,8 +104,8 @@ class QuotaSnapshot {
       message: status == QuotaStatus.error && usage.hasData
           ? 'Quota windows are unavailable; showing token usage.'
           : available && status == QuotaStatus.unavailable
-              ? null
-              : message,
+          ? null
+          : message,
       planName: planName,
       tokenUsage: usage,
       creditBalance: creditBalance,
@@ -156,20 +158,19 @@ QuotaSnapshot _snapshot(
   String? planName,
   CreditBalance? creditBalance,
   int? resetCredits,
-}) =>
-    QuotaSnapshot(
-      provider: provider,
-      windows: windows,
-      observedAt: observedAt ?? DateTime.now(),
-      source: source,
-      planName: planName,
-      creditBalance: creditBalance,
-      resetCredits: resetCredits,
-      status: windows.isEmpty ? QuotaStatus.unavailable : QuotaStatus.live,
-      message: windows.isEmpty
-          ? 'No recognizable quota windows were returned.'
-          : null,
-    );
+}) => QuotaSnapshot(
+  provider: provider,
+  windows: windows,
+  observedAt: observedAt ?? DateTime.now(),
+  source: source,
+  planName: planName,
+  creditBalance: creditBalance,
+  resetCredits: resetCredits,
+  status: windows.isEmpty ? QuotaStatus.unavailable : QuotaStatus.live,
+  message: windows.isEmpty
+      ? 'No recognizable quota windows were returned.'
+      : null,
+);
 
 String? normalizeReportedPlanName(Object? value) {
   if (value is! String) return null;
@@ -184,8 +185,9 @@ String? normalizeReportedPlanName(Object? value) {
 }
 
 String? _codexPlanName(Map<String, dynamic>? limits) {
-  final name =
-      normalizeReportedPlanName(limits?['planType'] ?? limits?['plan_type']);
+  final name = normalizeReportedPlanName(
+    limits?['planType'] ?? limits?['plan_type'],
+  );
   if (name == null) return null;
   return const {
         'free': 'Free',
@@ -229,10 +231,10 @@ QuotaSnapshot parseCodexQuota(
       final windowLabel = minutes == 300
           ? '5 hours'
           : minutes == 10080
-              ? '7 days'
-              : id == 'primary'
-                  ? 'Primary'
-                  : 'Secondary';
+          ? '7 days'
+          : id == 'primary'
+          ? 'Primary'
+          : 'Secondary';
       final bucketName = bucket['limitName'];
       final bucketLabel = bucketName is String && bucketName.isNotEmpty
           ? bucketName
@@ -257,10 +259,12 @@ QuotaSnapshot parseCodexQuota(
     source,
     planName:
         _codexPlanName(_object(buckets?['codex'])) ?? _codexPlanName(limits),
-    creditBalance: parseCreditBalance(_object(buckets?['codex'])?['credits']) ??
+    creditBalance:
+        parseCreditBalance(_object(buckets?['codex'])?['credits']) ??
         parseCreditBalance(limits['credits']),
     resetCredits: nonnegativeTokenCount(
-        _object(event['rateLimitResetCredits'])?['availableCount']),
+      _object(event['rateLimitResetCredits'])?['availableCount'],
+    ),
   ).withUsage();
 }
 
@@ -298,8 +302,13 @@ QuotaSnapshot parseClaudeQuota(
       ),
     );
   }
-  return _snapshot(ProviderKind.claude, windows, observedAt, source,
-      planName: normalizeReportedPlanName(planName));
+  return _snapshot(
+    ProviderKind.claude,
+    windows,
+    observedAt,
+    source,
+    planName: normalizeReportedPlanName(planName),
+  );
 }
 
 /// Accepts grouped quota buckets, a user status response, or a models map.
@@ -359,6 +368,11 @@ QuotaSnapshot parseAntigravityQuota(
   }
   final planStatus = _object(userStatus?['planStatus']);
   final planInfo = _object(planStatus?['planInfo']);
-  return _snapshot(ProviderKind.antigravity, windows, observedAt, source,
-      planName: normalizeReportedPlanName(planInfo?['planName']));
+  return _snapshot(
+    ProviderKind.antigravity,
+    windows,
+    observedAt,
+    source,
+    planName: normalizeReportedPlanName(planInfo?['planName']),
+  );
 }

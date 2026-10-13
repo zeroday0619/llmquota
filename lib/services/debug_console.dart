@@ -4,13 +4,25 @@ import 'dart:io';
 
 import '../debug_report.dart';
 import 'quota_controller.dart';
+import 'preferences.dart';
 
 abstract class DebugConsoleWindow {
   Future<void> show(QuotaController controller);
   Future<void> close();
 }
 
+void setDebugConsoleTheme(DebugConsoleWindow? console, AppThemeMode mode) {
+  if (console is ProcessDebugConsoleWindow) console.setThemeMode(mode);
+}
+
 class ProcessDebugConsoleWindow implements DebugConsoleWindow {
+  AppThemeMode _themeMode = AppThemeMode.dark;
+
+  void setThemeMode(AppThemeMode mode) {
+    _themeMode = mode;
+    _sendReport();
+  }
+
   Process? _process;
   QuotaController? _controller;
   Timer? _timer;
@@ -36,10 +48,10 @@ class ProcessDebugConsoleWindow implements DebugConsoleWindow {
   }
 
   Future<void> _open(QuotaController controller, int generation) async {
-    final process = await Process.start(
-      Platform.resolvedExecutable,
-      ['--debug-console'],
-    );
+    final process = await Process.start(Platform.resolvedExecutable, [
+      '--debug-console',
+      '--theme=${_themeMode.name}',
+    ]);
     if (generation != _generation) {
       process.kill();
       return;
@@ -52,51 +64,56 @@ class ProcessDebugConsoleWindow implements DebugConsoleWindow {
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen(
-      (line) {
-        try {
-          final request = jsonDecode(line);
-          if (request is Map &&
-              request['consoleReady'] == true &&
-              request['visible'] == true &&
-              request['title'] == 'LLM Quota — Debug console' &&
-              !ready.isCompleted) {
-            ready.complete();
-          }
-          if (request is Map &&
-              request['clearLogs'] == true &&
-              identical(_process, process)) {
-            controller.clearDebugLogs();
-          }
-          if (request is Map &&
-              request['refresh'] == true &&
-              identical(_process, process)) {
-            unawaited(controller.refresh());
-          }
-        } on FormatException {
-          // Native runtime messages do not belong to the console protocol.
-        }
-      },
-      onError: (Object error) {
-        if (!ready.isCompleted) {
-          ready.completeError(StateError('Debug console protocol failed.'));
-        }
-      },
-    );
+          (line) {
+            try {
+              final request = jsonDecode(line);
+              if (request is Map &&
+                  request['consoleReady'] == true &&
+                  request['visible'] == true &&
+                  request['title'] == 'LLM Quota — Debug console' &&
+                  !ready.isCompleted) {
+                ready.complete();
+              }
+              if (request is Map &&
+                  request['clearLogs'] == true &&
+                  identical(_process, process)) {
+                controller.clearDebugLogs();
+              }
+              if (request is Map &&
+                  request['refresh'] == true &&
+                  identical(_process, process)) {
+                unawaited(controller.refresh());
+              }
+            } on FormatException {
+              // Native runtime messages do not belong to the console protocol.
+            }
+          },
+          onError: (Object error) {
+            if (!ready.isCompleted) {
+              ready.completeError(StateError('Debug console protocol failed.'));
+            }
+          },
+        );
     unawaited(process.stderr.drain<void>());
-    unawaited(process.stdin.done.catchError((Object error) {
-      if (identical(_process, process)) unawaited(close());
-    }));
-    unawaited(process.exitCode.then((_) {
-      if (!ready.isCompleted) {
-        if (generation != _generation) {
-          ready.complete();
-        } else {
-          ready.completeError(
-              StateError('Debug console exited before opening.'));
+    unawaited(
+      process.stdin.done.catchError((Object error) {
+        if (identical(_process, process)) unawaited(close());
+      }),
+    );
+    unawaited(
+      process.exitCode.then((_) {
+        if (!ready.isCompleted) {
+          if (generation != _generation) {
+            ready.complete();
+          } else {
+            ready.completeError(
+              StateError('Debug console exited before opening.'),
+            );
+          }
         }
-      }
-      if (identical(_process, process)) _detach();
-    }));
+        if (identical(_process, process)) _detach();
+      }),
+    );
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => _sendReport());
     _sendReport();
     try {
@@ -125,10 +142,13 @@ class ProcessDebugConsoleWindow implements DebugConsoleWindow {
     final controller = _controller;
     if (process == null || controller == null) return;
     try {
-      process.stdin.writeln(jsonEncode({
-        'lines': buildDebugReport(controller, DateTime.now()),
-        'logLines': buildDebugLogLines(controller),
-      }));
+      process.stdin.writeln(
+        jsonEncode({
+          'themeMode': _themeMode.name,
+          'lines': buildDebugReport(controller, DateTime.now()),
+          'logLines': buildDebugLogLines(controller),
+        }),
+      );
     } on Object {
       // The child may close between the exit notification and a report update.
       unawaited(close());

@@ -13,8 +13,9 @@ Future<TokenUsage> readClaudeTokenUsage({
   DateTime? now,
 }) async {
   final candidateSink = Zone.current[integrationDiagnosticSinkKey];
-  final sink =
-      candidateSink is IntegrationDiagnosticSink ? candidateSink : null;
+  final sink = candidateSink is IntegrationDiagnosticSink
+      ? candidateSink
+      : null;
   final attemptedAt = sink == null ? null : DateTime.now().toUtc();
   final stopwatch = sink == null ? null : (Stopwatch()..start());
   final records = <String, _UsageRecord>{};
@@ -22,23 +23,26 @@ Future<TokenUsage> readClaudeTokenUsage({
   var files = 0;
   void emit(String stage, String outcome, [Object? error]) {
     if (sink == null) return;
-    sink(IntegrationDiagnostic(
-      stage: stage,
-      outcome: outcome,
-      attemptedAt: attemptedAt!,
-      elapsed: stopwatch!.elapsed,
-      errorType: error?.runtimeType.toString(),
-      metrics: {'bytes': bytes, 'files': files, 'records': records.length},
-    ));
+    sink(
+      IntegrationDiagnostic(
+        stage: stage,
+        outcome: outcome,
+        attemptedAt: attemptedAt!,
+        elapsed: stopwatch!.elapsed,
+        errorType: error?.runtimeType.toString(),
+        metrics: {'bytes': bytes, 'files': files, 'records': records.length},
+      ),
+    );
   }
 
   TokenUsage unavailable(String reason) => TokenUsage(
-        todayLabel: 'Today (local)',
-        lifetimeLabel: 'Local total',
-        note: reason,
-      );
+    todayLabel: 'Today (local)',
+    lifetimeLabel: 'Local total',
+    note: reason,
+  );
   final home = environment['HOME'] ?? environment['USERPROFILE'];
-  final config = environment['CLAUDE_CONFIG_DIR'] ??
+  final config =
+      environment['CLAUDE_CONFIG_DIR'] ??
       (home == null ? null : '$home/.claude');
   if (config == null) {
     emit('claude.history.noHistory', 'unavailable');
@@ -50,15 +54,19 @@ Future<TokenUsage> readClaudeTokenUsage({
     return unavailable('Claude local history is unavailable.');
   }
   try {
-    await for (final entry
-        in directory.list(recursive: true, followLinks: false)) {
+    await for (final entry in directory.list(
+      recursive: true,
+      followLinks: false,
+    )) {
       if (entry is! File || !entry.path.endsWith('.jsonl')) continue;
       var isActiveTranscript = false;
       if (transcriptPath != null) {
         try {
           // Filesystem identity handles native separators and relative paths.
-          isActiveTranscript =
-              await FileSystemEntity.identical(entry.path, transcriptPath);
+          isActiveTranscript = await FileSystemEntity.identical(
+            entry.path,
+            transcriptPath,
+          );
         } on FileSystemException {
           // A stale transcript path must not hide retained history totals.
         }
@@ -72,10 +80,11 @@ Future<TokenUsage> readClaudeTokenUsage({
         emit('claude.history.scanLimit', 'unavailable');
         return unavailable('Claude history exceeds the local scan limit.');
       }
-      await for (final line in entry
-          .openRead(0, length)
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())) {
+      await for (final line
+          in entry
+              .openRead(0, length)
+              .transform(utf8.decoder)
+              .transform(const LineSplitter())) {
         if (line.trim().isEmpty) continue;
         final decoded = jsonDecode(line);
         if (decoded is! Map) throw const FormatException();
@@ -146,9 +155,11 @@ Future<TokenUsage> readClaudeTokenUsage({
   final session = records.values.where((record) => record.session);
   emit('claude.history.scan.success', 'success');
   return TokenUsage(
-    today: sum(records.values.where(
-      (record) => !record.date.isBefore(start) && record.date.isBefore(end),
-    )),
+    today: sum(
+      records.values.where(
+        (record) => !record.date.isBefore(start) && record.date.isBefore(end),
+      ),
+    ),
     session: session.isEmpty ? null : sum(session),
     lifetime: sum(records.values),
     todayLabel: 'Today (local)',
@@ -159,8 +170,14 @@ Future<TokenUsage> readClaudeTokenUsage({
 }
 
 class _UsageRecord {
-  const _UsageRecord(this.date, this.input, this.output, this.cached,
-      this.created, this.session);
+  const _UsageRecord(
+    this.date,
+    this.input,
+    this.output,
+    this.cached,
+    this.created,
+    this.session,
+  );
   final DateTime date;
   final int input;
   final int output;

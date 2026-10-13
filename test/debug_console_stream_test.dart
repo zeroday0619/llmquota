@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gbt_fluent2_ui/gbt_fluent2_ui.dart';
 import 'package:llmquota/debug_console.dart';
 
 void main() {
@@ -16,26 +17,28 @@ void main() {
     logs.dispose();
   });
 
-  Future<void> openConsole(WidgetTester tester,
-      {VoidCallback? onClearLogs}) async {
-    await tester.pumpWidget(DebugConsoleApp(
-      lines: metrics,
-      logLines: logs,
-      onClearLogs: onClearLogs,
-      onRefresh: () {},
-      onClose: () {},
-    ));
+  Future<void> openConsole(
+    WidgetTester tester, {
+    VoidCallback? onClearLogs,
+  }) async {
+    await tester.pumpWidget(
+      DebugConsoleApp(
+        lines: metrics,
+        logLines: logs,
+        onClearLogs: onClearLogs,
+        onRefresh: () {},
+        onClose: () {},
+      ),
+    );
     await tester.pumpAndSettle();
   }
 
-  testWidgets('Live logs update independently from retained metrics',
-      (tester) async {
+  testWidgets('Live logs update independently from retained metrics', (
+    tester,
+  ) async {
     await openConsole(tester);
     expect(find.text(logs.value.first), findsOneWidget);
-    logs.value = [
-      ...logs.value,
-      '[0.002] Codex JSON-RPC receive initialize',
-    ];
+    logs.value = [...logs.value, '[0.002] Codex JSON-RPC receive initialize'];
     await tester.pumpAndSettle();
     expect(find.text(logs.value.last), findsOneWidget);
 
@@ -51,8 +54,9 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('Pause freezes displayed logs and resume catches up',
-      (tester) async {
+  testWidgets('Pause freezes displayed logs and resume catches up', (
+    tester,
+  ) async {
     await openConsole(tester);
     await tester.tap(find.byTooltip('Pause log updates'));
     await tester.pumpAndSettle();
@@ -85,13 +89,17 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('Clear forwards callback without changing metrics',
-      (tester) async {
+  testWidgets('Clear forwards callback without changing metrics', (
+    tester,
+  ) async {
     var clears = 0;
-    await openConsole(tester, onClearLogs: () {
-      clears++;
-      logs.value = [];
-    });
+    await openConsole(
+      tester,
+      onClearLogs: () {
+        clears++;
+        logs.value = [];
+      },
+    );
     await tester.tap(find.byTooltip('Clear logs'));
     await tester.pumpAndSettle();
     expect(clears, 1);
@@ -103,8 +111,9 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('Minimum window supports scrolling without overflow',
-      (tester) async {
+  testWidgets('Minimum window supports scrolling without overflow', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(340, 260);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -117,7 +126,7 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byType(ListView), findsOneWidget);
     expect(find.text('Auto-scroll'), findsOneWidget);
-    await tester.tap(find.byType(Switch));
+    await tester.tap(find.byType(FluentSwitchToggle));
     await tester.pumpAndSettle();
     await tester.drag(find.byType(ListView), const Offset(0, 100));
     await tester.pumpAndSettle();
@@ -126,34 +135,40 @@ void main() {
   });
 
   testWidgets(
-      'Auto-scroll follows mixed-height rows and respects manual scroll',
-      (tester) async {
-    tester.view.physicalSize = const Size(340, 260);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    logs.value = List.generate(
-      100,
-      (index) => index.isEven
-          ? '[$index] JSON-RPC send {"method":"account/rateLimits/read",'
-              '"params":{"account":"redacted","details":"${'sanitized ' * 30}"}}'
-          : '[$index] JSON-RPC receive complete',
-    );
-    await openConsole(tester);
-    expect(find.text(logs.value.last).hitTestable(), findsOneWidget);
-    const appended = '[100] JSON-RPC receive appended-tail';
-    logs.value = [...logs.value, appended];
-    await tester.pumpAndSettle();
-    expect(find.text(appended).hitTestable(), findsOneWidget);
+    'Auto-scroll follows mixed-height rows and respects manual scroll',
+    (tester) async {
+      tester.view.physicalSize = const Size(340, 260);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      logs.value = List.generate(
+        100,
+        (index) => index.isEven
+            ? '[$index] JSON-RPC send {"method":"account/rateLimits/read",'
+                  '"params":{"account":"redacted","details":"${'sanitized ' * 30}"}}'
+            : '[$index] JSON-RPC receive complete',
+      );
+      await openConsole(tester);
+      expect(find.text(logs.value.last).hitTestable(), findsOneWidget);
+      const appended = '[100] JSON-RPC receive appended-tail';
+      logs.value = [...logs.value, appended];
+      await tester.pumpAndSettle();
+      expect(find.text(appended).hitTestable(), findsOneWidget);
 
-    await tester.drag(find.byType(ListView), const Offset(0, 160));
-    await tester.pumpAndSettle();
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
-    const next = '[101] JSON-RPC receive unattended-tail';
-    logs.value = [...logs.value, next];
-    await tester.pumpAndSettle();
-    expect(find.text(next).hitTestable(), findsNothing);
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox());
-  });
+      await tester.drag(find.byType(ListView), const Offset(0, 160));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FluentSwitchToggle>(find.byType(FluentSwitchToggle))
+            .value,
+        isFalse,
+      );
+      const next = '[101] JSON-RPC receive unattended-tail';
+      logs.value = [...logs.value, next];
+      await tester.pumpAndSettle();
+      expect(find.text(next).hitTestable(), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 }

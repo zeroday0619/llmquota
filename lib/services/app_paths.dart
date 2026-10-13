@@ -2,8 +2,8 @@ import 'dart:io';
 
 class AppPaths {
   AppPaths({Map<String, String>? environment, String? operatingSystem})
-      : environment = environment ?? Platform.environment,
-        operatingSystem = operatingSystem ?? Platform.operatingSystem;
+    : environment = environment ?? Platform.environment,
+      operatingSystem = operatingSystem ?? Platform.operatingSystem;
 
   final Map<String, String> environment;
   final String operatingSystem;

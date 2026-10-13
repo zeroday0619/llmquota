@@ -39,11 +39,9 @@ class AccountStore {
     final temporary = File('${directory.path}/accounts.json');
     try {
       await temporary.writeAsString(
-          '${const JsonEncoder.withIndent('  ').convert({
-                'version': 1,
-                'accounts': accounts.map((account) => account.toJson()).toList()
-              })}\n',
-          flush: true);
+        '${const JsonEncoder.withIndent('  ').convert({'version': 1, 'accounts': accounts.map((account) => account.toJson()).toList()})}\n',
+        flush: true,
+      );
       await temporary.rename(file.path);
     } finally {
       await directory.delete(recursive: true);

@@ -35,22 +35,37 @@ void main() {
     'demo',
     'hud',
     'accounts',
-    'accounts-hud'
+    'accounts-hud',
   ]) {
     testWidgets('render $mode preview', (tester) async {
       final font = Platform.environment['LLMQUETA_PREVIEW_FONT'];
       final icons = Platform.environment['LLMQUETA_ICON_FONT'];
+      final fluentIcons = Platform.environment['LLMQUETA_FLUENT_FONT'];
+      final fluentFilledIcons =
+          Platform.environment['LLMQUETA_FLUENT_FILLED_FONT'];
       if (font == null || icons == null) {
         fail(
-            'Set LLMQUETA_PREVIEW_FONT and LLMQUETA_ICON_FONT to local font files.');
+          'Set LLMQUETA_PREVIEW_FONT and LLMQUETA_ICON_FONT to local font files.',
+        );
       }
       await tester.runAsync(() async {
-        for (final entry
-            in {'.AppleSystemUIFont': font, 'MaterialIcons': icons}.entries) {
+        for (final entry in {
+          '.AppleSystemUIFont': font,
+          'Roboto': font,
+          'MaterialIcons': icons,
+          if (fluentIcons != null)
+            'packages/fluentui_system_icons/FluentSystemIcons-Regular':
+                fluentIcons,
+          if (fluentFilledIcons != null)
+            'packages/fluentui_system_icons/FluentSystemIcons-Filled':
+                fluentFilledIcons,
+        }.entries) {
           final loader = FontLoader(entry.key);
-          loader.addFont(File(entry.value)
-              .readAsBytes()
-              .then((bytes) => ByteData.sublistView(bytes)));
+          loader.addFont(
+            File(
+              entry.value,
+            ).readAsBytes().then((bytes) => ByteData.sublistView(bytes)),
+          );
           await loader.load();
         }
       });
@@ -59,15 +74,17 @@ void main() {
       final accounts = multiple
           ? [
               QuotaAccount(
-                  id: 'personal',
-                  provider: ProviderKind.codex,
-                  label: 'Personal',
-                  configurationDirectory: Directory.systemTemp.path),
+                id: 'personal',
+                provider: ProviderKind.codex,
+                label: 'Personal',
+                configurationDirectory: Directory.systemTemp.path,
+              ),
               QuotaAccount(
-                  id: 'work',
-                  provider: ProviderKind.codex,
-                  label: 'Work',
-                  configurationDirectory: Directory.systemTemp.path),
+                id: 'work',
+                provider: ProviderKind.codex,
+                label: 'Work',
+                configurationDirectory: Directory.systemTemp.path,
+              ),
             ]
           : QuotaAccount.defaults;
       final controller = QuotaController(accounts: accounts);
@@ -84,23 +101,27 @@ void main() {
             lifetime: TokenCount(total: 4200000),
             note: 'Preview data.',
           ),
-          creditBalance:
-              const CreditBalance(balance: '120.50', hasCredits: true),
+          creditBalance: const CreditBalance(
+            balance: '120.50',
+            hasCredits: true,
+          ),
           resetCredits: 2,
           observedAt: DateTime.now(),
           windows: [
             QuotaWindow(
-                id: 'primary',
-                label: '5 hours',
-                usedPercent: 28,
-                resetsAt:
-                    DateTime.now().add(const Duration(hours: 2, minutes: 18))),
+              id: 'primary',
+              label: '5 hours',
+              usedPercent: 28,
+              resetsAt: DateTime.now().add(
+                const Duration(hours: 2, minutes: 18),
+              ),
+            ),
             QuotaWindow(
-                id: 'secondary',
-                label: '7 days',
-                usedPercent: 43,
-                resetsAt:
-                    DateTime.now().add(const Duration(days: 3, hours: 7))),
+              id: 'secondary',
+              label: '7 days',
+              usedPercent: 43,
+              resetsAt: DateTime.now().add(const Duration(days: 3, hours: 7)),
+            ),
           ],
         );
         if (multiple) {
@@ -111,19 +132,27 @@ void main() {
           controller.snapshots['codex'] = preview;
         }
       }
-      await tester.binding.setSurfaceSize(Size(hud ? 320 : 380,
-          overlayHeight(controller, false, hud: hud) - (hud ? 0 : 28)));
+      await tester.binding.setSurfaceSize(
+        Size(
+          hud ? 320 : 380,
+          overlayHeight(controller, false, hud: hud) - (hud ? 0 : 28),
+        ),
+      );
       final boundaryKey = GlobalKey();
-      await tester.pumpWidget(RepaintBoundary(
+      await tester.pumpWidget(
+        RepaintBoundary(
           key: boundaryKey,
           child: QuotaApp(
             controller: controller,
             window: PreviewWindow(),
             preferences: OverlayPreferences(hud: hud),
-          )));
+          ),
+        ),
+      );
       await tester.pump();
-      final boundary = boundaryKey.currentContext!.findRenderObject()!
-          as RenderRepaintBoundary;
+      final boundary =
+          boundaryKey.currentContext!.findRenderObject()!
+              as RenderRepaintBoundary;
       await tester.runAsync(() async {
         final image = await boundary.toImage(pixelRatio: 2);
         final bytes = await image.toByteData(format: ui.ImageByteFormat.png);

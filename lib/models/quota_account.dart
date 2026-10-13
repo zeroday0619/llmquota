@@ -26,9 +26,10 @@ class QuotaAccount {
     QuotaAccount(id: 'codex', provider: ProviderKind.codex, label: 'Default'),
     QuotaAccount(id: 'claude', provider: ProviderKind.claude, label: 'Default'),
     QuotaAccount(
-        id: 'antigravity',
-        provider: ProviderKind.antigravity,
-        label: 'Default'),
+      id: 'antigravity',
+      provider: ProviderKind.antigravity,
+      label: 'Default',
+    ),
   ];
 
   bool get isDefault => id == provider.name;
@@ -36,39 +37,46 @@ class QuotaAccount {
   void validate() {
     if (!RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$').hasMatch(id)) {
       throw const FormatException(
-          'Account ID must contain 1–80 letters, digits, hyphens, or underscores.');
+        'Account ID must contain 1–80 letters, digits, hyphens, or underscores.',
+      );
     }
     if (label.trim().isEmpty ||
         label.length > 80 ||
         RegExp(r'[\x00-\x1f\x7f]').hasMatch(label)) {
       throw const FormatException(
-          'Account label must contain 1–80 printable characters.');
+        'Account label must contain 1–80 printable characters.',
+      );
     }
     for (final value in [
       configurationDirectory,
       snapshotPath,
       endpoint,
-      csrfTokenEnvironmentVariable
+      csrfTokenEnvironmentVariable,
     ]) {
       if (value != null && (value.trim().isEmpty || value.contains('\u0000'))) {
         throw const FormatException(
-            'Connection values must not be empty or contain null characters.');
+          'Connection values must not be empty or contain null characters.',
+        );
       }
     }
-    if (ProviderKind.values
-        .any((kind) => kind.name == id && kind != provider)) {
+    if (ProviderKind.values.any(
+      (kind) => kind.name == id && kind != provider,
+    )) {
       throw const FormatException(
-          'Default account IDs must match their provider.');
+        'Default account IDs must match their provider.',
+      );
     }
     for (final path in [configurationDirectory, snapshotPath]) {
       if (path != null &&
           (path.length > 4096 ||
               !(Platform.isWindows
-                  ? RegExp(r'^(?:[A-Za-z]:[\\/]|\\\\[^\\]+\\[^\\]+)')
-                      .hasMatch(path)
+                  ? RegExp(
+                      r'^(?:[A-Za-z]:[\\/]|\\\\[^\\]+\\[^\\]+)',
+                    ).hasMatch(path)
                   : path.startsWith('/')))) {
         throw const FormatException(
-            'Account paths must be absolute and at most 4096 characters.');
+          'Account paths must be absolute and at most 4096 characters.',
+        );
       }
     }
     if ((provider != ProviderKind.antigravity &&
@@ -77,25 +85,30 @@ class QuotaAccount {
             (configurationDirectory != null || snapshotPath != null)) ||
         (provider == ProviderKind.codex && snapshotPath != null)) {
       throw const FormatException(
-          'Connection fields do not match the account provider.');
+        'Connection fields do not match the account provider.',
+      );
     }
-    final configured = configurationDirectory != null ||
+    final configured =
+        configurationDirectory != null ||
         snapshotPath != null ||
         endpoint != null ||
         csrfTokenEnvironmentVariable != null;
     if (!isDefault || configured) {
       if (provider == ProviderKind.codex && configurationDirectory == null) {
         throw const FormatException(
-            'Codex accounts require a configuration directory.');
+          'Codex accounts require a configuration directory.',
+        );
       }
       if (provider == ProviderKind.claude &&
           (configurationDirectory == null || snapshotPath == null)) {
         throw const FormatException(
-            'Claude accounts require a configuration directory and snapshot path.');
+          'Claude accounts require a configuration directory and snapshot path.',
+        );
       }
       if (provider == ProviderKind.antigravity && endpoint == null) {
         throw const FormatException(
-            'Antigravity accounts require an explicit endpoint.');
+          'Antigravity accounts require an explicit endpoint.',
+        );
       }
     }
     if (endpoint != null) {
@@ -111,28 +124,31 @@ class QuotaAccount {
           uri.hasQuery ||
           uri.hasFragment) {
         throw const FormatException(
-            'Endpoint must be a loopback HTTP(S) origin with an explicit port and no credentials.');
+          'Endpoint must be a loopback HTTP(S) origin with an explicit port and no credentials.',
+        );
       }
     }
     if (csrfTokenEnvironmentVariable != null &&
-        !RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$')
-            .hasMatch(csrfTokenEnvironmentVariable!)) {
+        !RegExp(
+          r'^[A-Za-z_][A-Za-z0-9_]*$',
+        ).hasMatch(csrfTokenEnvironmentVariable!)) {
       throw const FormatException(
-          'CSRF token environment variable name is invalid.');
+        'CSRF token environment variable name is invalid.',
+      );
     }
   }
 
   Map<String, Object?> toJson() => {
-        'id': id,
-        'provider': provider.name,
-        'label': label,
-        if (configurationDirectory != null)
-          'configurationDirectory': configurationDirectory,
-        if (snapshotPath != null) 'snapshotPath': snapshotPath,
-        if (endpoint != null) 'endpoint': endpoint,
-        if (csrfTokenEnvironmentVariable != null)
-          'csrfTokenEnvironmentVariable': csrfTokenEnvironmentVariable,
-      };
+    'id': id,
+    'provider': provider.name,
+    'label': label,
+    if (configurationDirectory != null)
+      'configurationDirectory': configurationDirectory,
+    if (snapshotPath != null) 'snapshotPath': snapshotPath,
+    if (endpoint != null) 'endpoint': endpoint,
+    if (csrfTokenEnvironmentVariable != null)
+      'csrfTokenEnvironmentVariable': csrfTokenEnvironmentVariable,
+  };
 
   factory QuotaAccount.fromJson(Map<String, dynamic> json) {
     String? field(String name, {bool required = false}) {
@@ -143,8 +159,9 @@ class QuotaAccount {
     }
 
     final providerName = field('provider', required: true);
-    final matches =
-        ProviderKind.values.where((provider) => provider.name == providerName);
+    final matches = ProviderKind.values.where(
+      (provider) => provider.name == providerName,
+    );
     if (matches.isEmpty)
       throw const FormatException('Unknown account provider.');
     final account = QuotaAccount(

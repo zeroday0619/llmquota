@@ -6,14 +6,17 @@ import 'package:llmquota/main.dart' as application;
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  testWidgets('HUD startup renders without a native button overlap',
-      (tester) async {
+  testWidgets('HUD startup renders without a native button overlap', (
+    tester,
+  ) async {
     await application.main(['--demo', '--hud']);
     await tester.pumpAndSettle();
     expect(find.byType(HudOverlay), findsOneWidget);
     expect(find.text('QUOTA / DEMO'), findsOneWidget);
     expect(
-        find.byTooltip('Return to window (Esc)').hitTestable(), findsOneWidget);
+      find.byTooltip('Return to window (Esc)').hitTestable(),
+      findsOneWidget,
+    );
     expect(find.byTooltip('Close').hitTestable(), findsOneWidget);
     expect(await windowManager.isAlwaysOnTop(), isTrue);
     expect(await windowManager.getOpacity(), lessThanOrEqualTo(0.91));

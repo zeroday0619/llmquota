@@ -1,9 +1,115 @@
+import 'package:flutter/material.dart';
+import 'package:llmquota/usage_summary.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llmquota/app_theme.dart';
+import 'package:llmquota/services/preferences.dart';
 import 'package:llmquota/models/quota.dart';
 import 'package:llmquota/models/usage.dart';
 
 void main() {
   final now = DateTime(2026, 10, 8, 14);
+
+  QuotaSnapshot snapshot({
+    TokenUsage usage = const TokenUsage(),
+    CreditBalance? credits,
+    int? resetCredits,
+  }) => QuotaSnapshot(
+    provider: ProviderKind.codex,
+    windows: [],
+    observedAt: now,
+    source: 'Fixture',
+    status: QuotaStatus.live,
+    tokenUsage: usage,
+    creditBalance: credits,
+    resetCredits: resetCredits,
+  );
+
+  for (final hud in [false, true]) {
+    testWidgets('unknown usage rows leave no empty space with hud=$hud', (
+      tester,
+    ) async {
+      final observation = snapshot(credits: const CreditBalance());
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: applicationTheme(AppThemeMode.dark),
+          home: Scaffold(
+            body: UsageSummary(snapshot: observation, hud: hud),
+          ),
+        ),
+      );
+      expect(find.textContaining('tokens'), findsNothing);
+      expect(find.text('Credits'), findsNothing);
+      expect(find.textContaining('unavailable'), findsNothing);
+      expect(UsageSummary.estimatedHeight(observation, hud: hud), 0);
+      expect(tester.getSize(find.byType(UsageSummary)).height, 0);
+    });
+
+    testWidgets('zero usage and reset credits remain visible with hud=$hud', (
+      tester,
+    ) async {
+      final observation = snapshot(
+        usage: const TokenUsage(
+          today: TokenCount(total: 0),
+          lifetime: TokenCount(total: 1200),
+        ),
+        credits: const CreditBalance(balance: '0'),
+        resetCredits: 0,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: applicationTheme(AppThemeMode.dark),
+          home: Scaffold(
+            body: UsageSummary(snapshot: observation, hud: hud),
+          ),
+        ),
+      );
+      expect(find.text('Today tokens'), findsOneWidget);
+      expect(find.text('Session tokens'), findsNothing);
+      expect(find.text('Lifetime tokens'), findsOneWidget);
+      expect(find.text('0'), findsNWidgets(2));
+      expect(find.text('1.2K'), findsOneWidget);
+      expect(find.text('0 credits'), findsOneWidget);
+      expect(find.text('Reset credits'), findsOneWidget);
+      expect(
+        UsageSummary.estimatedHeight(observation, hud: hud),
+        8 + 4 * (hud ? 20 : 24),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('explicit credit availability remains visible with hud=$hud', (
+      tester,
+    ) async {
+      for (final available in [true, false]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: applicationTheme(AppThemeMode.dark),
+            home: Scaffold(
+              body: UsageSummary(
+                snapshot: snapshot(
+                  credits: CreditBalance(hasCredits: available),
+                ),
+                hud: hud,
+              ),
+            ),
+          ),
+        );
+        expect(find.text('Credits'), findsOneWidget);
+        expect(
+          find.text(available ? 'Available' : 'No credits'),
+          findsOneWidget,
+        );
+        expect(find.text('Balance unavailable'), findsNothing);
+        expect(
+          UsageSummary.estimatedHeight(
+            snapshot(credits: CreditBalance(hasCredits: available)),
+            hud: hud,
+          ),
+          8 + (hud ? 20 : 24),
+        );
+      }
+    });
+  }
 
   test('account usage reads today and lifetime independently', () {
     final usage = parseCodexTokenUsage({
@@ -31,7 +137,7 @@ void main() {
       [
         {'startDate': '2026-10-08', 'tokens': 100},
         {'startDate': '2026-10-08', 'tokens': 200},
-      ]
+      ],
     ]) {
       final usage = parseCodexTokenUsage({
         'summary': {'lifetimeTokens': 500},
@@ -47,7 +153,7 @@ void main() {
       final usage = parseCodexTokenUsage({
         'summary': {'lifetimeTokens': invalid},
         'dailyUsageBuckets': [
-          {'startDate': '2026-10-08', 'tokens': 30}
+          {'startDate': '2026-10-08', 'tokens': 30},
         ],
       }, now: now);
       expect(usage.today!.total, 30);
@@ -57,28 +163,29 @@ void main() {
 
   test('thread groups sum explicit totals without double-counting cache', () {
     final usage = parseCodexTokenUsage(
-        {
-          'summary': {'lifetimeTokens': 10000},
+      {
+        'summary': {'lifetimeTokens': 10000},
+      },
+      now: now,
+      sessionPayload: {
+        'threadUsage': {
+          'groups': [
+            {
+              'totalTokens': 120,
+              'inputTokens': 100,
+              'outputTokens': 20,
+              'cachedInputTokens': 80,
+            },
+            {
+              'totalTokens': 60,
+              'inputTokens': 50,
+              'outputTokens': 10,
+              'cachedInputTokens': 40,
+            },
+          ],
         },
-        now: now,
-        sessionPayload: {
-          'threadUsage': {
-            'groups': [
-              {
-                'totalTokens': 120,
-                'inputTokens': 100,
-                'outputTokens': 20,
-                'cachedInputTokens': 80
-              },
-              {
-                'totalTokens': 60,
-                'inputTokens': 50,
-                'outputTokens': 10,
-                'cachedInputTokens': 40
-              },
-            ]
-          },
-        });
+      },
+    );
     expect(usage.session!.total, 180);
     expect(usage.session!.input, 150);
     expect(usage.session!.output, 30);
@@ -87,14 +194,17 @@ void main() {
   });
 
   test('partial session groups cannot be presented as a complete total', () {
-    final usage = parseCodexTokenUsage({}, sessionPayload: {
-      'threadUsage': {
-        'groups': [
-          {'totalTokens': 100},
-          {'totalTokens': null}
-        ]
+    final usage = parseCodexTokenUsage(
+      {},
+      sessionPayload: {
+        'threadUsage': {
+          'groups': [
+            {'totalTokens': 100},
+            {'totalTokens': null},
+          ],
+        },
       },
-    });
+    );
     expect(usage.session, isNull);
     expect(usage.hasData, isFalse);
   });
@@ -118,7 +228,7 @@ void main() {
       'USD 20',
       true,
       {},
-      []
+      [],
     ]) {
       expect(parseCreditBalance({'balance': value}), isNull);
     }
@@ -128,11 +238,11 @@ void main() {
   test('Codex credits are account data and reset credits stay separate', () {
     final snapshot = parseCodexQuota({
       'rateLimits': {
-        'credits': {'balance': '5.25', 'hasCredits': true}
+        'credits': {'balance': '5.25', 'hasCredits': true},
       },
       'rateLimitsByLimitId': {
         'review': {
-          'credits': {'balance': '999'}
+          'credits': {'balance': '999'},
         },
       },
       'rateLimitResetCredits': {'availableCount': 2},
@@ -145,9 +255,9 @@ void main() {
   });
 
   test('token-only observations become visible without inventing quota', () {
-    final snapshot = parseCodexQuota({}).withUsage(
-      tokenUsage: const TokenUsage(lifetime: TokenCount(total: 123)),
-    );
+    final snapshot = parseCodexQuota(
+      {},
+    ).withUsage(tokenUsage: const TokenUsage(lifetime: TokenCount(total: 123)));
     expect(snapshot.windows, isEmpty);
     expect(snapshot.hasUsage, isTrue);
     expect(snapshot.status, QuotaStatus.live);
