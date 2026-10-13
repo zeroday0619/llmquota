@@ -21,7 +21,11 @@ void main() {
         .toFilePath();
     final temporary = await Directory.systemTemp.createTemp('quota-bridge-');
     addTearDown(() => temporary.delete(recursive: true));
-    Future<int> writeSnapshot(String path, int used) async {
+    Future<int> writeSnapshot(
+      String path,
+      int used, {
+      Future<void> Function(Process)? beforeInput,
+    }) async {
       final process = await Process.start(dart, [
         'run',
         'tool/claude_statusline.dart',
@@ -32,6 +36,7 @@ void main() {
       final errors = process.stderr.transform(utf8.decoder).join();
       try {
         return await (() async {
+          if (beforeInput != null) await beforeInput(process);
           process.stdin.write(
             jsonEncode({
               'rate_limits': {
@@ -76,5 +81,41 @@ void main() {
       )['rate_limits']['five_hour']['used_percentage'],
       20,
     );
+
+    if (!Platform.isWindows) {
+      final victim = File('${temporary.path}/victim.txt');
+      await victim.writeAsString('original');
+      final snapshot = File('${temporary.path}/symlink.json');
+      expect(
+        await writeSnapshot(
+          snapshot.path,
+          35,
+          beforeInput: (process) async {
+            await Link(
+              '${snapshot.path}.${process.pid}.temp',
+            ).create(victim.path);
+          },
+        ),
+        0,
+      );
+      expect(await victim.readAsString(), 'original');
+      expect(
+        jsonDecode(
+          await snapshot.readAsString(),
+        )['rate_limits']['five_hour']['used_percentage'],
+        35,
+      );
+
+      final unsafe = Directory('${temporary.path}/shared');
+      await unsafe.create();
+      final permissionChange = await Process.run('chmod', [
+        '0777',
+        unsafe.path,
+      ]);
+      expect(permissionChange.exitCode, 0);
+      final rejected = File('${unsafe.path}/quota.json');
+      expect(await writeSnapshot(rejected.path, 35), 1);
+      expect(await rejected.exists(), isFalse);
+    }
   });
 }
